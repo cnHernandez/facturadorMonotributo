@@ -21,9 +21,3 @@
 .runtime/
 **/.runtime/
 **/logs/
-
-# Artefactos de compilación
-**/bin/
-**/obj/
-**/node_modules/
-**/dist/

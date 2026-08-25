@@ -1,0 +1,79 @@
+import { useEffect, useState } from 'react'
+import { Building2, FileText, HeartPulse, Pencil, Plus, ReceiptText, Trash2, Users } from 'lucide-react'
+
+type Paciente = { id: number; dni: string; numAfiliado: string; nombre: string; apellido: string; domicilio: string; estado: boolean; obraSocialId?: number | null }
+type Obra = { id: number; cuit: string; nombre: string; domicilioComercial: string; condicion: 'Contado' | 'CuentaCorriente'; estado: boolean }
+type View = 'pacientes' | 'obras' | 'facturar'
+
+const demoPacientes: Paciente[] = [{ id: 1, dni: '32941208', numAfiliado: 'A-77142', nombre: 'Sofía', apellido: 'Pérez', domicilio: 'Villa de Mayo', estado: true, obraSocialId: 1 }, { id: 2, dni: '41378665', numAfiliado: '—', nombre: 'Matías', apellido: 'Ramos', domicilio: 'Los Polvorines', estado: true }]
+const demoObras: Obra[] = [{ id: 1, cuit: '30500026791', nombre: 'OSDE', domicilioComercial: 'Ciudad Autónoma de Buenos Aires', condicion: 'CuentaCorriente', estado: true }, { id: 2, cuit: '30500029513', nombre: 'Swiss Medical', domicilioComercial: 'Ciudad Autónoma de Buenos Aires', condicion: 'Contado', estado: true }]
+const patientBlank = (): Omit<Paciente, 'id'> => ({ dni: '', numAfiliado: '', nombre: '', apellido: '', domicilio: '', estado: true, obraSocialId: null })
+const obraBlank = (): Omit<Obra, 'id'> => ({ cuit: '', nombre: '', domicilioComercial: '', condicion: 'Contado', estado: true })
+
+async function api(path: string, method: string, body?: unknown) {
+  const response = await fetch(path, { method, headers: { 'Content-Type': 'application/json' }, body: body ? JSON.stringify(body) : undefined })
+  if (!response.ok) throw new Error()
+  return response.status === 204 ? null : response.json()
+}
+
+function App() {
+  const [view, setView] = useState<View>('pacientes')
+  const [message, setMessage] = useState('Modo demostración')
+  const [pacientes, setPacientes] = useState<Paciente[]>(demoPacientes)
+  const [obras, setObras] = useState<Obra[]>(demoObras)
+  const [patient, setPatient] = useState<Omit<Paciente, 'id'>>(patientBlank())
+  const [obra, setObra] = useState<Omit<Obra, 'id'>>(obraBlank())
+  const [patientId, setPatientId] = useState<number | null>(null)
+  const [obraId, setObraId] = useState<number | null>(null)
+  const [targetKind, setTargetKind] = useState<'paciente' | 'obra'>('paciente')
+  const [targetId, setTargetId] = useState('1')
+  const [amount, setAmount] = useState('1000')
+
+  useEffect(() => {
+    Promise.all([api('/api/pacientes', 'GET'), api('/api/obras-sociales', 'GET')])
+      .then(([patientData, obraData]) => { if (patientData && obraData) { setPacientes(patientData); setObras(obraData); setMessage('API conectada') } })
+      .catch(() => setMessage('Modo demostración'))
+  }, [])
+
+  const savePatient = async (event: React.FormEvent) => {
+    event.preventDefault()
+    try { const data = await api(patientId ? `/api/pacientes/${patientId}` : '/api/pacientes', patientId ? 'PUT' : 'POST', patient); setPacientes(items => patientId ? items.map(x => x.id === patientId ? data ?? { ...patient, id: patientId } : x) : [...items, data ?? { ...patient, id: Date.now() }]); setPatient(patientBlank()); setPatientId(null) } catch { setMessage('No se pudo guardar el paciente') }
+  }
+  const saveObra = async (event: React.FormEvent) => {
+    event.preventDefault()
+    try { const data = await api(obraId ? `/api/obras-sociales/${obraId}` : '/api/obras-sociales', obraId ? 'PUT' : 'POST', obra); setObras(items => obraId ? items.map(x => x.id === obraId ? data ?? { ...obra, id: obraId } : x) : [...items, data ?? { ...obra, id: Date.now() }]); setObra(obraBlank()); setObraId(null) } catch { setMessage('No se pudo guardar la obra social') }
+  }
+  const remove = async (kind: 'pacientes' | 'obras-sociales', id: number) => { if (!confirm('¿Eliminar este registro?')) return; try { await api(`/api/${kind}/${id}`, 'DELETE'); kind === 'pacientes' ? setPacientes(x => x.filter(i => i.id !== id)) : setObras(x => x.filter(i => i.id !== id)) } catch { setMessage('No se pudo eliminar el registro') } }
+  const downloadPdf = async () => {
+    const selected = targetKind === 'paciente' ? pacientes.find(x => x.id === Number(targetId)) : obras.find(x => x.id === Number(targetId))
+    if (!selected) { setMessage('Seleccioná un destinatario para facturar'); return }
+    const isPatient = 'dni' in selected
+    try {
+      const response = await fetch('/api/arca/cae/pdf', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ tipoComprobante: 11, tipoDocumentoReceptor: isPatient ? 96 : 80, numeroDocumentoReceptor: Number((isPatient ? selected.dni : selected.cuit).replaceAll('-', '')), nombreReceptor: isPatient ? `${selected.nombre} ${selected.apellido}` : selected.nombre, importeTotal: Number(amount) }) })
+      if (!response.ok) throw new Error()
+      const url = URL.createObjectURL(await response.blob()); const link = Object.assign(document.createElement('a'), { href: url, download: 'factura-c.pdf' }); link.click(); URL.revokeObjectURL(url); setMessage('Factura emitida y descargada')
+    } catch { setMessage('No se pudo emitir la factura') }
+  }
+  const nav = [{ id: 'pacientes' as const, label: 'Pacientes', icon: Users }, { id: 'obras' as const, label: 'Obras sociales', icon: Building2 }, { id: 'facturar' as const, label: 'Facturar', icon: ReceiptText }]
+  const targets = targetKind === 'paciente' ? pacientes : obras
+
+  return <div className="min-h-screen bg-[#edf3f0] text-slate-800">
+    <header className="flex h-16 items-center justify-between border-b border-emerald-950/10 bg-white px-5 md:px-8"><div className="flex items-center gap-3"><div className="grid size-8 place-items-center rounded-md bg-emerald-700 text-white"><HeartPulse size={18} /></div><div><p className="text-sm font-semibold text-emerald-950">Lau · Gestión clínica</p><p className="text-xs text-slate-500">Facturación y pacientes</p></div></div><span className="hidden text-xs text-slate-500 sm:block">{message}</span></header>
+    <div className="mx-auto grid max-w-[1440px] md:grid-cols-[214px_1fr]"><aside className="border-b border-emerald-950/10 bg-[#e4eee8] p-3 md:min-h-[calc(100vh-4rem)] md:border-b-0 md:border-r"><p className="px-3 pb-3 pt-2 text-[11px] font-bold uppercase text-emerald-900/55">Operación</p><nav className="flex gap-1 overflow-x-auto md:flex-col">{nav.map(item => <button key={item.id} onClick={() => setView(item.id)} className={`flex shrink-0 items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium ${view === item.id ? 'bg-emerald-800 text-white' : 'text-emerald-950/70 hover:bg-white/70'}`}><item.icon size={18} />{item.label}</button>)}</nav><div className="mt-8 hidden border-t border-emerald-950/10 px-3 pt-5 text-xs text-emerald-950/55 md:block"><b>Homologación ARCA</b><p className="mt-1">Punto de venta 0004</p></div></aside>
+    <main className="p-4 md:p-8">
+      {view === 'pacientes' && <section className="space-y-6"><Title title="Pacientes" text="Registro y seguimiento de afiliaciones" button={<button onClick={() => { setPatient(patientBlank()); setPatientId(null) }} className="command"><Plus size={17} />Nuevo paciente</button>} /><div className="grid gap-6 xl:grid-cols-[1fr_340px]"><PatientsTable items={pacientes} obras={obras} edit={x => { const { id, ...draft } = x; setPatientId(id); setPatient(draft) }} remove={x => remove('pacientes', x)} /><PatientForm data={patient} obras={obras} setData={setPatient} save={savePatient} editing={patientId !== null} /></div></section>}
+      {view === 'obras' && <section className="space-y-6"><Title title="Obras sociales" text="Convenios y condiciones comerciales" button={<button onClick={() => { setObra(obraBlank()); setObraId(null) }} className="command"><Plus size={17} />Nueva obra social</button>} /><div className="grid gap-6 xl:grid-cols-[1fr_340px]"><ObrasTable items={obras} edit={x => { const { id, ...draft } = x; setObraId(id); setObra(draft) }} remove={x => remove('obras-sociales', x)} /><ObraForm data={obra} setData={setObra} save={saveObra} editing={obraId !== null} /></div></section>}
+      {view === 'facturar' && <section className="space-y-6"><Title title="Nueva factura" text="Factura C · Punto de venta 0004" /><div className="grid gap-6 lg:grid-cols-[1fr_360px]"><div className="panel p-6"><div className="mb-7 flex gap-2 border-b border-slate-200"><button onClick={() => { setTargetKind('paciente'); setTargetId(String(pacientes[0]?.id ?? '')) }} className={`tab ${targetKind === 'paciente' ? 'tab-active' : ''}`}><Users size={16} />Paciente</button><button onClick={() => { setTargetKind('obra'); setTargetId(String(obras[0]?.id ?? '')) }} className={`tab ${targetKind === 'obra' ? 'tab-active' : ''}`}><Building2 size={16} />Obra social</button></div><div className="grid gap-5 sm:grid-cols-2"><Field label={targetKind === 'paciente' ? 'Paciente' : 'Obra social'}><select value={targetId} onChange={e => setTargetId(e.target.value)}>{targets.map(x => <option key={x.id} value={x.id}>{'apellido' in x ? `${x.apellido}, ${x.nombre}` : x.nombre}</option>)}</select></Field><Field label="Importe total"><input value={amount} onChange={e => setAmount(e.target.value)} inputMode="decimal" /></Field></div><div className="mt-6 flex items-center justify-between rounded-md border border-emerald-900/10 bg-emerald-50 p-4"><div><b className="text-sm text-emerald-950">Factura C</b><p className="mt-1 text-sm text-emerald-900/65">Servicios profesionales psicopedagógicos</p></div><span className="text-lg font-bold text-emerald-950">${Number(amount || 0).toLocaleString('es-AR')}</span></div></div><aside className="panel flex flex-col p-6"><FileText className="mb-5 text-emerald-700" size={32} /><h2 className="text-lg font-bold">Emitir y descargar</h2><p className="mt-2 text-sm leading-6 text-slate-500">El comprobante se autoriza en ARCA y se descarga como PDF.</p><div className="mt-6 space-y-3 text-sm"><Summary label="CUIT emisor" value="27-190124415-5" /><Summary label="Punto de venta" value="0004" /><Summary label="Tipo" value="Factura C" /></div><button onClick={downloadPdf} className="command mt-auto justify-center"><ReceiptText size={17} />Facturar y descargar PDF</button></aside></div></section>}
+    </main></div>
+  </div>
+}
+
+const Title = ({ title, text, button }: { title: string; text: string; button?: React.ReactNode }) => <div className="flex flex-wrap items-end justify-between gap-4"><div><p className="text-xs font-bold uppercase text-emerald-700">Gestión</p><h1 className="mt-1 text-2xl font-bold text-slate-900">{title}</h1><p className="mt-1 text-sm text-slate-500">{text}</p></div>{button}</div>
+const Field = ({ label, children }: { label: string; children: React.ReactNode }) => <label className="block text-sm font-medium text-slate-700"><span className="mb-1.5 block">{label}</span>{children}</label>
+const Summary = ({ label, value }: { label: string; value: string }) => <div className="flex justify-between border-b border-slate-100 pb-3"><span className="text-slate-500">{label}</span><span className="font-medium">{value}</span></div>
+function PatientsTable({ items, obras, edit, remove }: { items: Paciente[]; obras: Obra[]; edit: (x: Paciente) => void; remove: (id: number) => void }) { return <div className="panel overflow-x-auto"><table><thead><tr><th>Paciente</th><th>Documento</th><th>Obra social</th><th>Estado</th><th /></tr></thead><tbody>{items.map(x => <tr key={x.id}><td><b>{x.apellido}, {x.nombre}</b><small>{x.domicilio}</small></td><td>{x.dni}<small>Afiliado {x.numAfiliado}</small></td><td>{obras.find(o => o.id === x.obraSocialId)?.nombre ?? 'Particular'}</td><td><span className={x.estado ? 'badge badge-green' : 'badge'}>{x.estado ? 'Activo' : 'Inactivo'}</span></td><td className="actions"><button onClick={() => edit(x)} title="Editar"><Pencil size={16} /></button><button onClick={() => remove(x.id)} title="Eliminar"><Trash2 size={16} /></button></td></tr>)}</tbody></table></div> }
+function ObrasTable({ items, edit, remove }: { items: Obra[]; edit: (x: Obra) => void; remove: (id: number) => void }) { return <div className="panel overflow-x-auto"><table><thead><tr><th>Obra social</th><th>CUIT</th><th>Condición</th><th>Estado</th><th /></tr></thead><tbody>{items.map(x => <tr key={x.id}><td><b>{x.nombre}</b><small>{x.domicilioComercial}</small></td><td>{x.cuit}</td><td>{x.condicion === 'CuentaCorriente' ? 'Cta. cte.' : 'Contado'}</td><td><span className={x.estado ? 'badge badge-green' : 'badge'}>{x.estado ? 'Activa' : 'Inactiva'}</span></td><td className="actions"><button onClick={() => edit(x)} title="Editar"><Pencil size={16} /></button><button onClick={() => remove(x.id)} title="Eliminar"><Trash2 size={16} /></button></td></tr>)}</tbody></table></div> }
+function PatientForm({ data, setData, obras, save, editing }: { data: Omit<Paciente, 'id'>; setData: (x: Omit<Paciente, 'id'>) => void; obras: Obra[]; save: (e: React.FormEvent) => void; editing: boolean }) { return <form onSubmit={save} className="panel space-y-4 p-5"><h2 className="font-bold">{editing ? 'Editar paciente' : 'Nuevo paciente'}</h2><div className="grid grid-cols-2 gap-3"><Field label="Nombre"><input required value={data.nombre} onChange={e => setData({ ...data, nombre: e.target.value })} /></Field><Field label="Apellido"><input required value={data.apellido} onChange={e => setData({ ...data, apellido: e.target.value })} /></Field></div><Field label="DNI"><input required value={data.dni} onChange={e => setData({ ...data, dni: e.target.value })} /></Field><Field label="Nº afiliado"><input required value={data.numAfiliado} onChange={e => setData({ ...data, numAfiliado: e.target.value })} /></Field><Field label="Domicilio"><input required value={data.domicilio} onChange={e => setData({ ...data, domicilio: e.target.value })} /></Field><Field label="Obra social"><select value={data.obraSocialId ?? ''} onChange={e => setData({ ...data, obraSocialId: e.target.value ? Number(e.target.value) : null })}><option value="">Particular</option>{obras.map(x => <option key={x.id} value={x.id}>{x.nombre}</option>)}</select></Field><label className="flex gap-2 text-sm"><input type="checkbox" checked={data.estado} onChange={e => setData({ ...data, estado: e.target.checked })} />Activo</label><button className="command w-full justify-center">Guardar paciente</button></form> }
+function ObraForm({ data, setData, save, editing }: { data: Omit<Obra, 'id'>; setData: (x: Omit<Obra, 'id'>) => void; save: (e: React.FormEvent) => void; editing: boolean }) { return <form onSubmit={save} className="panel space-y-4 p-5"><h2 className="font-bold">{editing ? 'Editar obra social' : 'Nueva obra social'}</h2><Field label="Nombre"><input required value={data.nombre} onChange={e => setData({ ...data, nombre: e.target.value })} /></Field><Field label="CUIT"><input required value={data.cuit} onChange={e => setData({ ...data, cuit: e.target.value })} /></Field><Field label="Domicilio comercial"><input required value={data.domicilioComercial} onChange={e => setData({ ...data, domicilioComercial: e.target.value })} /></Field><Field label="Condición"><select value={data.condicion} onChange={e => setData({ ...data, condicion: e.target.value as Obra['condicion'] })}><option value="Contado">Contado</option><option value="CuentaCorriente">Cuenta corriente</option></select></Field><label className="flex gap-2 text-sm"><input type="checkbox" checked={data.estado} onChange={e => setData({ ...data, estado: e.target.checked })} />Activa</label><button className="command w-full justify-center">Guardar obra social</button></form> }
+
+export default App

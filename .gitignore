@@ -1,0 +1,29 @@
+# Material criptográfico y credenciales
+*.key
+*.crt
+*.csr
+*.pem
+*.pfx
+*.p12
+*.der
+
+# Configuración local y variables de entorno
+.env
+.env.*
+!.env.example
+**/appsettings.Development.json
+**/appsettings.Production.json
+**/appsettings.Local.json
+**/appsettings.json
+
+# Datos locales y tickets de autenticación
+/data/
+.runtime/
+**/.runtime/
+**/logs/
+
+# Artefactos de compilación
+**/bin/
+**/obj/
+**/node_modules/
+**/dist/

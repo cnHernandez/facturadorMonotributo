@@ -1,4 +1,5 @@
 using System.Net;
+using Microsoft.EntityFrameworkCore;
 using Serilog;
 
 namespace Back.Middleware
@@ -27,6 +28,16 @@ namespace Back.Middleware
                 {
                     message = "Acceso no autorizado.",
                     error = unauthorizedEx.Message
+                });
+            }
+            catch (DbUpdateException dbEx) when (dbEx.InnerException?.Message.Contains("Duplicate entry") == true)
+            {
+                Log.Warning("[HTTP-409] [path: {requestPath}] Entrada duplicada", context.Request.Path);
+                context.Response.ContentType = "application/json";
+                context.Response.StatusCode = (int)HttpStatusCode.Conflict;
+                await context.Response.WriteAsJsonAsync(new
+                {
+                    message = "Ya existe un registro con ese valor único (por ejemplo, CUIT o DNI duplicado)."
                 });
             }
             catch (Exception ex)

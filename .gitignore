@@ -18,6 +18,8 @@
 
 # Datos locales y tickets de autenticación
 /data/
+**/data/
+**/Data/mysql/
 .runtime/
 **/.runtime/
 **/logs/

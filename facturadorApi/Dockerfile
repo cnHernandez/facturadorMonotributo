@@ -14,7 +14,13 @@ RUN dotnet publish facturador.net.csproj -c Release -o out
 # Usar imagen runtime para ejecutar
 FROM mcr.microsoft.com/dotnet/aspnet:8.0
 WORKDIR /app
+
+# Copiar la aplicación publicada
 COPY --from=build-env /app/out .
+
+# Copiar los certificados
+COPY facturador-psicopedagoga.crt ./
+COPY facturador-psicopedagoga.key ./
 
 EXPOSE 80
 

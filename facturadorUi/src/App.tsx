@@ -4,9 +4,6 @@ import { Building2, FileText, HeartPulse, Pencil, Plus, ReceiptText, Trash2, Use
 type Paciente = { id: number; dni: string; numAfiliado: string; nombre: string; apellido: string; domicilio: string; estado: boolean; obraSocialId?: number | null }
 type Obra = { id: number; cuit: string; nombre: string; domicilioComercial: string; condicion: 'Contado' | 'CuentaCorriente'; estado: boolean }
 type View = 'pacientes' | 'obras' | 'facturar'
-
-const demoPacientes: Paciente[] = [{ id: 1, dni: '32941208', numAfiliado: 'A-77142', nombre: 'Sofía', apellido: 'Pérez', domicilio: 'Villa de Mayo', estado: true, obraSocialId: 1 }, { id: 2, dni: '41378665', numAfiliado: '—', nombre: 'Matías', apellido: 'Ramos', domicilio: 'Los Polvorines', estado: true }]
-const demoObras: Obra[] = [{ id: 1, cuit: '30500026791', nombre: 'OSDE', domicilioComercial: 'Ciudad Autónoma de Buenos Aires', condicion: 'CuentaCorriente', estado: true }, { id: 2, cuit: '30500029513', nombre: 'Swiss Medical', domicilioComercial: 'Ciudad Autónoma de Buenos Aires', condicion: 'Contado', estado: true }]
 const patientBlank = (): Omit<Paciente, 'id'> => ({ dni: '', numAfiliado: '', nombre: '', apellido: '', domicilio: '', estado: true, obraSocialId: null })
 const obraBlank = (): Omit<Obra, 'id'> => ({ cuit: '', nombre: '', domicilioComercial: '', condicion: 'Contado', estado: true })
 
@@ -18,9 +15,9 @@ async function api(path: string, method: string, body?: unknown) {
 
 function App() {
   const [view, setView] = useState<View>('pacientes')
-  const [message, setMessage] = useState('Modo demostración')
-  const [pacientes, setPacientes] = useState<Paciente[]>(demoPacientes)
-  const [obras, setObras] = useState<Obra[]>(demoObras)
+  const [message, setMessage] = useState('Cargando datos...')
+  const [pacientes, setPacientes] = useState<Paciente[]>([])
+  const [obras, setObras] = useState<Obra[]>([])
   const [patient, setPatient] = useState<Omit<Paciente, 'id'>>(patientBlank())
   const [obra, setObra] = useState<Omit<Obra, 'id'>>(obraBlank())
   const [patientId, setPatientId] = useState<number | null>(null)
@@ -31,8 +28,12 @@ function App() {
 
   useEffect(() => {
     Promise.all([api('/api/pacientes', 'GET'), api('/api/obras-sociales', 'GET')])
-      .then(([patientData, obraData]) => { if (patientData && obraData) { setPacientes(patientData); setObras(obraData); setMessage('API conectada') } })
-      .catch(() => setMessage('Modo demostración'))
+      .then(([patientData, obraData]) => { 
+        setPacientes(patientData || []); 
+        setObras(obraData || []); 
+        setMessage(patientData?.length ? 'Datos cargados correctamente' : 'Base de datos vacía') 
+      })
+      .catch((error) => { setMessage('Error conectando con API: ' + error.message) })
   }, [])
 
   const savePatient = async (event: React.FormEvent) => {

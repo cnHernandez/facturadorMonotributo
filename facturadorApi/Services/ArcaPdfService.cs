@@ -79,7 +79,7 @@ namespace Back.Services
                             {
                                 emColumn.Item().Text("DATOS DEL EMISOR").FontSize(9).Bold().Underline();
                                 emColumn.Item().PaddingTop(4).Text("Nombre / Razón Social").FontSize(8).Italic();
-                                emColumn.Item().Text("RESPONSABLE MONOTRIBUTO").FontSize(10).Bold();
+                                emColumn.Item().Text(_options.NombreEmisor).FontSize(10).Bold();
                                 emColumn.Item().PaddingTop(4).Text($"CUIT: {FormatearCuit(_options.CuitEmisor)}").FontSize(9);
                                 emColumn.Item().Text($"Domicilio: {_options.DomicilioComercial}").FontSize(9);
                                 emColumn.Item().Text($"Condición ante el IVA: RESPONSABLE MONOTRIBUTO").FontSize(9);

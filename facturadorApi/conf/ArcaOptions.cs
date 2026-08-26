@@ -9,6 +9,7 @@ namespace Back.Conf
         public string Service { get; set; } = "wsfe";
         public long CuitEmisor { get; set; }
         public int PuntoDeVenta { get; set; }
+        public string NombreEmisor { get; set; } = null!;
         public string DomicilioComercial { get; set; } = null!;
         public string TicketCachePath { get; set; } = ".runtime/arca-ticket-wsfe.dat";
         public string CertificatePath { get; set; } = null!;

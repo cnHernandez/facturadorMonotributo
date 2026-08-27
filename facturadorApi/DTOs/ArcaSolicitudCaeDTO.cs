@@ -16,18 +16,38 @@ namespace Back.DTOs
         [StringLength(150)]
         public string? NombreReceptor { get; set; }
 
+        [StringLength(200)]
+        public string? DomicilioReceptor { get; set; }
+
         public decimal ImporteTotal { get; set; }
 
         public DateOnly? FechaComprobante { get; set; }
 
-        public IEnumerable<ValidationResult> Validate(ValidationContext validationContext)
+        [StringLength(150)]
+        public string? PacienteNombre { get; set; }
+
+        [StringLength(20)]
+        public string? PacienteDni { get; set; }
+
+        public IEnumerable<ValidationResult> Validate(
+            ValidationContext validationContext)
         {
-            // Si TipoDocumentoReceptor es 99 (Consumidor Final), NumeroDocumentoReceptor debe ser 0
-            if (TipoDocumentoReceptor == 99 && NumeroDocumentoReceptor != 0)
+            if (TipoDocumentoReceptor == 99 &&
+                NumeroDocumentoReceptor != 0)
             {
                 yield return new ValidationResult(
                     "Para facturas C con Consumidor Final (TipoDocumento=99), el número de documento debe ser 0.",
-                    new[] { nameof(NumeroDocumentoReceptor) });
+                    new[] { nameof(NumeroDocumentoReceptor) }
+                );
+            }
+
+            if (TipoDocumentoReceptor == 80 &&
+                string.IsNullOrWhiteSpace(PacienteNombre))
+            {
+                yield return new ValidationResult(
+                    "Cuando el receptor es una obra social, debe indicarse el paciente correspondiente.",
+                    new[] { nameof(PacienteNombre) }
+                );
             }
         }
     }

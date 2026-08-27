@@ -1,8 +1,6 @@
-
 import { useEffect, useState } from 'react'
 import {
   Building2,
-  FileText,
   HeartPulse,
   Pencil,
   Plus,
@@ -87,17 +85,29 @@ function App() {
   const [obra, setObra] =
     useState<Omit<Obra, 'id'>>(obraBlank())
 
-  const [patientId, setPatientId] = useState<number | null>(null)
-  const [obraId, setObraId] = useState<number | null>(null)
+  const [patientId, setPatientId] =
+    useState<number | null>(null)
 
-  const [showPatientForm, setShowPatientForm] = useState(false)
-  const [showObraForm, setShowObraForm] = useState(false)
+  const [obraId, setObraId] =
+    useState<number | null>(null)
+
+  const [showPatientForm, setShowPatientForm] =
+    useState(false)
+
+  const [showObraForm, setShowObraForm] =
+    useState(false)
 
   const [targetKind, setTargetKind] =
     useState<'paciente' | 'obra'>('paciente')
 
-  const [targetId, setTargetId] = useState('')
-  const [amount, setAmount] = useState('1000')
+  const [targetId, setTargetId] =
+    useState('')
+
+  const [invoicePatientId, setInvoicePatientId] =
+    useState('')
+
+  const [amount, setAmount] =
+    useState('1000')
 
   useEffect(() => {
     Promise.all([
@@ -105,27 +115,54 @@ function App() {
       api('/api/obras-sociales', 'GET'),
     ])
       .then(([patientData, obraData]) => {
-        setPacientes(patientData || [])
-        setObras(obraData || [])
+        const loadedPatients =
+          (patientData || []) as Paciente[]
 
-        if (patientData?.length) {
+        const loadedObras =
+          (obraData || []) as Obra[]
+
+        setPacientes(loadedPatients)
+        setObras(loadedObras)
+
+        if (loadedPatients.length > 0) {
           setTargetKind('paciente')
-          setTargetId(String(patientData[0].id))
-        } else if (obraData?.length) {
+          setTargetId(
+            String(loadedPatients[0].id)
+          )
+        } else if (loadedObras.length > 0) {
+          const firstObra = loadedObras[0]
+
           setTargetKind('obra')
-          setTargetId(String(obraData[0].id))
+          setTargetId(
+            String(firstObra.id)
+          )
+
+          const firstPatients =
+            loadedPatients.filter(
+              (paciente) =>
+                paciente.obraSocialId ===
+                firstObra.id
+            )
+
+          setInvoicePatientId(
+            firstPatients.length > 0
+              ? String(firstPatients[0].id)
+              : ''
+          )
         }
 
         setMessage(
-          patientData?.length
+          loadedPatients.length > 0 ||
+            loadedObras.length > 0
             ? 'Datos cargados correctamente'
             : 'Base de datos vacía'
         )
       })
       .catch((error) => {
+        console.error(error)
+
         setMessage(
-          'Error conectando con API: ' +
-            (error?.message || 'Error desconocido')
+          'Error conectando con API'
         )
       })
   }, [])
@@ -170,7 +207,9 @@ function App() {
     setObraId(null)
   }
 
-  const savePatient = async (event: React.FormEvent) => {
+  const savePatient = async (
+    event: React.FormEvent
+  ) => {
     event.preventDefault()
 
     try {
@@ -182,20 +221,20 @@ function App() {
         patient
       )
 
+      const savedPatient =
+        (data ?? {
+          ...patient,
+          id: patientId ?? Date.now(),
+        }) as Paciente
+
       setPacientes((items) =>
         patientId
-          ? items.map((x) =>
-              x.id === patientId
-                ? data ?? { ...patient, id: patientId }
-                : x
+          ? items.map((item) =>
+              item.id === patientId
+                ? savedPatient
+                : item
             )
-          : [
-              ...items,
-              data ?? {
-                ...patient,
-                id: Date.now(),
-              },
-            ]
+          : [...items, savedPatient]
       )
 
       setMessage(
@@ -207,11 +246,16 @@ function App() {
       closePatientForm()
     } catch (error) {
       console.error(error)
-      setMessage('No se pudo guardar el paciente')
+
+      setMessage(
+        'No se pudo guardar el paciente'
+      )
     }
   }
 
-  const saveObra = async (event: React.FormEvent) => {
+  const saveObra = async (
+    event: React.FormEvent
+  ) => {
     event.preventDefault()
 
     try {
@@ -223,20 +267,20 @@ function App() {
         obra
       )
 
+      const savedObra =
+        (data ?? {
+          ...obra,
+          id: obraId ?? Date.now(),
+        }) as Obra
+
       setObras((items) =>
         obraId
-          ? items.map((x) =>
-              x.id === obraId
-                ? data ?? { ...obra, id: obraId }
-                : x
+          ? items.map((item) =>
+              item.id === obraId
+                ? savedObra
+                : item
             )
-          : [
-              ...items,
-              data ?? {
-                ...obra,
-                id: Date.now(),
-              },
-            ]
+          : [...items, savedObra]
       )
 
       setMessage(
@@ -248,7 +292,10 @@ function App() {
       closeObraForm()
     } catch (error) {
       console.error(error)
-      setMessage('No se pudo guardar la obra social')
+
+      setMessage(
+        'No se pudo guardar la obra social'
+      )
     }
   }
 
@@ -256,64 +303,145 @@ function App() {
     kind: 'pacientes' | 'obras-sociales',
     id: number
   ) => {
-    if (!confirm('¿Eliminar este registro?')) return
+    if (!confirm('¿Eliminar este registro?')) {
+      return
+    }
 
     try {
-      await api(`/api/${kind}/${id}`, 'DELETE')
+      await api(
+        `/api/${kind}/${id}`,
+        'DELETE'
+      )
 
       if (kind === 'pacientes') {
         setPacientes((items) =>
-          items.filter((item) => item.id !== id)
-        )
-
-        if (targetKind === 'paciente' && targetId === String(id)) {
-          const remaining = pacientes.filter(
+          items.filter(
             (item) => item.id !== id
           )
+        )
+
+        if (
+          targetKind === 'paciente' &&
+          targetId === String(id)
+        ) {
+          const remaining =
+            pacientes.filter(
+              (item) => item.id !== id
+            )
 
           setTargetId(
-            remaining.length
+            remaining.length > 0
               ? String(remaining[0].id)
               : ''
           )
+        }
+
+        if (
+          invoicePatientId === String(id)
+        ) {
+          setInvoicePatientId('')
         }
       } else {
         setObras((items) =>
-          items.filter((item) => item.id !== id)
-        )
-
-        if (targetKind === 'obra' && targetId === String(id)) {
-          const remaining = obras.filter(
+          items.filter(
             (item) => item.id !== id
           )
+        )
 
-          setTargetId(
-            remaining.length
-              ? String(remaining[0].id)
-              : ''
-          )
+        if (
+          targetKind === 'obra' &&
+          targetId === String(id)
+        ) {
+          const remaining =
+            obras.filter(
+              (item) => item.id !== id
+            )
+
+          if (remaining.length > 0) {
+            setTargetId(
+              String(remaining[0].id)
+            )
+
+            const associatedPatients =
+              pacientes.filter(
+                (patient) =>
+                  patient.obraSocialId ===
+                  remaining[0].id
+              )
+
+            setInvoicePatientId(
+              associatedPatients.length > 0
+                ? String(
+                    associatedPatients[0].id
+                  )
+                : ''
+            )
+          } else {
+            setTargetId('')
+            setInvoicePatientId('')
+          }
         }
       }
 
-      setMessage('Registro eliminado correctamente')
+      setMessage(
+        'Registro eliminado correctamente'
+      )
     } catch (error) {
       console.error(error)
-      setMessage('No se pudo eliminar el registro')
+
+      setMessage(
+        'No se pudo eliminar el registro'
+      )
     }
   }
 
+  const invoicePatients =
+    targetKind === 'obra'
+      ? pacientes.filter(
+          (paciente) =>
+            paciente.obraSocialId ===
+            Number(targetId)
+        )
+      : []
+
   const downloadPdf = async () => {
-    const selected =
+    const selectedPatient =
       targetKind === 'paciente'
         ? pacientes.find(
-            (x) => x.id === Number(targetId)
+            (x) =>
+              x.id === Number(targetId)
           )
-        : obras.find(
-            (x) => x.id === Number(targetId)
+        : pacientes.find(
+            (x) =>
+              x.id ===
+              Number(invoicePatientId)
           )
 
-    if (!selected) {
-      setMessage('Seleccioná un destinatario para facturar')
+    const selectedObra =
+      targetKind === 'obra'
+        ? obras.find(
+            (x) =>
+              x.id === Number(targetId)
+          )
+        : null
+
+    if (
+      targetKind === 'paciente' &&
+      !selectedPatient
+    ) {
+      setMessage(
+        'Seleccioná un paciente para facturar'
+      )
+      return
+    }
+
+    if (
+      targetKind === 'obra' &&
+      (!selectedObra || !selectedPatient)
+    ) {
+      setMessage(
+        'Seleccioná la obra social y el paciente'
+      )
       return
     }
 
@@ -321,60 +449,109 @@ function App() {
       amount.replace(',', '.')
     )
 
-    if (!Number.isFinite(numericAmount) || numericAmount <= 0) {
-      setMessage('Ingresá un importe válido')
+    if (
+      !Number.isFinite(numericAmount) ||
+      numericAmount <= 0
+    ) {
+      setMessage(
+        'Ingresá un importe válido'
+      )
       return
     }
 
-    const isPatient = 'dni' in selected
-
     try {
-      setMessage('Emitiendo factura...')
+      setMessage(
+        'Emitiendo factura...'
+      )
 
       const response = await fetch(
         '/api/arca/cae/pdf',
         {
           method: 'POST',
           headers: {
-            'Content-Type': 'application/json',
+            'Content-Type':
+              'application/json',
           },
-          body: JSON.stringify({
-            tipoComprobante: 11,
-            tipoDocumentoReceptor: isPatient
-              ? 96
-              : 80,
-            numeroDocumentoReceptor: Number(
-              (
-                isPatient
-                  ? selected.dni
-                  : selected.cuit
-              ).replaceAll('-', '')
-            ),
-            nombreReceptor: isPatient
-              ? `${selected.nombre} ${selected.apellido}`
-              : selected.nombre,
-            importeTotal: numericAmount,
-          }),
+         body: JSON.stringify({
+  tipoComprobante: 11,
+
+  tipoDocumentoReceptor:
+    targetKind === 'paciente'
+      ? 96
+      : 80,
+
+  numeroDocumentoReceptor:
+    targetKind === 'paciente'
+      ? Number(
+          selectedPatient!.dni.replaceAll('-', '')
+        )
+      : Number(
+          selectedObra!.cuit.replaceAll('-', '')
+        ),
+
+  nombreReceptor:
+    targetKind === 'paciente'
+      ? `${selectedPatient!.nombre} ${selectedPatient!.apellido}`
+      : selectedObra!.nombre,
+
+  domicilioReceptor:
+    targetKind === 'paciente'
+      ? selectedPatient!.domicilio
+      : selectedObra!.domicilioComercial,
+
+  importeTotal: numericAmount,
+
+  pacienteNombre:
+    selectedPatient
+      ? `${selectedPatient.nombre} ${selectedPatient.apellido}`
+      : null,
+
+  pacienteDni:
+    selectedPatient
+      ? selectedPatient.dni
+      : null,
+})
         }
       )
 
       if (!response.ok) {
-        throw new Error(
+        let errorMessage =
           `HTTP ${response.status}`
-        )
+
+        try {
+          const errorBody =
+            await response.text()
+
+          if (errorBody) {
+            console.error(
+              'Respuesta del servidor:',
+              errorBody
+            )
+          }
+        } catch {
+          // Ignorar error de lectura
+        }
+
+        throw new Error(errorMessage)
       }
 
-      const blob = await response.blob()
-      const url = URL.createObjectURL(blob)
+      const blob =
+        await response.blob()
+
+      const url =
+        URL.createObjectURL(blob)
 
       const link =
         document.createElement('a')
 
       link.href = url
-      link.download = 'factura-c.pdf'
+      link.download =
+        'factura-c.pdf'
 
       document.body.appendChild(link)
+
       link.click()
+
       link.remove()
 
       URL.revokeObjectURL(url)
@@ -384,7 +561,10 @@ function App() {
       )
     } catch (error) {
       console.error(error)
-      setMessage('No se pudo emitir la factura')
+
+      setMessage(
+        'No se pudo emitir la factura'
+      )
     }
   }
 
@@ -405,11 +585,6 @@ function App() {
       icon: ReceiptText,
     },
   ]
-
-  const targets =
-    targetKind === 'paciente'
-      ? pacientes
-      : obras
 
   return (
     <div className="min-h-screen bg-[#edf3f0] text-slate-800">
@@ -446,7 +621,9 @@ function App() {
               <button
                 key={item.id}
                 type="button"
-                onClick={() => setView(item.id)}
+                onClick={() =>
+                  setView(item.id)
+                }
                 className={`flex shrink-0 items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium ${
                   view === item.id
                     ? 'bg-emerald-800 text-white'
@@ -461,6 +638,7 @@ function App() {
 
           <div className="mt-8 hidden border-t border-emerald-950/10 px-3 pt-5 text-xs text-emerald-950/55 md:block">
             <b>Homologación ARCA</b>
+
             <p className="mt-1">
               Punto de venta 0004
             </p>
@@ -468,6 +646,7 @@ function App() {
         </aside>
 
         <main className="p-4 md:p-8">
+          {/* PACIENTES */}
           {view === 'pacientes' && (
             <section className="space-y-6">
               <Title
@@ -490,12 +669,16 @@ function App() {
                 obras={obras}
                 edit={openEditPatient}
                 remove={(id) =>
-                  remove('pacientes', id)
+                  remove(
+                    'pacientes',
+                    id
+                  )
                 }
               />
             </section>
           )}
 
+          {/* OBRAS SOCIALES */}
           {view === 'obras' && (
             <section className="space-y-6">
               <Title
@@ -517,12 +700,16 @@ function App() {
                 items={obras}
                 edit={openEditObra}
                 remove={(id) =>
-                  remove('obras-sociales', id)
+                  remove(
+                    'obras-sociales',
+                    id
+                  )
                 }
               />
             </section>
           )}
 
+          {/* FACTURAR */}
           {view === 'facturar' && (
             <section className="space-y-6">
               <Title
@@ -532,62 +719,29 @@ function App() {
 
               <div className="w-full">
                 <div className="panel p-6">
-                  <div className="grid gap-5 sm:grid-cols-2">
-                    <Field
-                      label={
-                        targetKind === 'paciente'
-                          ? 'Paciente'
-                          : 'Obra social'
-                      }
-                    >
-                      <select
-                        value={targetId}
-                        onChange={(event) =>
-                          setTargetId(
-                            event.target.value
-                          )
-                        }
-                      >
-                        {targets.map((x) => (
-                          <option
-                            key={x.id}
-                            value={x.id}
-                          >
-                            {'apellido' in x
-                              ? `${x.apellido}, ${x.nombre}`
-                              : x.nombre}
-                          </option>
-                        ))}
-                      </select>
-                    </Field>
 
-                    <Field label="Importe total">
-                      <input
-                        value={amount}
-                        onChange={(event) =>
-                          setAmount(
-                            event.target.value
-                          )
-                        }
-                        inputMode="decimal"
-                        placeholder="1000"
-                      />
-                    </Field>
-                  </div>
-
-                  <div className="mt-5 flex gap-2 border-b border-slate-200 pb-2">
+                  <div className="mb-6 flex gap-2 border-b border-slate-200">
                     <button
                       type="button"
                       onClick={() => {
-                        setTargetKind('paciente')
+                        setTargetKind(
+                          'paciente'
+                        )
+
                         setTargetId(
                           String(
-                            pacientes[0]?.id ?? ''
+                            pacientes[0]?.id ??
+                              ''
                           )
+                        )
+
+                        setInvoicePatientId(
+                          ''
                         )
                       }}
                       className={`tab ${
-                        targetKind === 'paciente'
+                        targetKind ===
+                        'paciente'
                           ? 'tab-active'
                           : ''
                       }`}
@@ -599,11 +753,43 @@ function App() {
                     <button
                       type="button"
                       onClick={() => {
-                        setTargetKind('obra')
+                        setTargetKind(
+                          'obra'
+                        )
+
+                        const firstObra =
+                          obras[0]
+
+                        if (!firstObra) {
+                          setTargetId('')
+                          setInvoicePatientId(
+                            ''
+                          )
+
+                          return
+                        }
+
                         setTargetId(
                           String(
-                            obras[0]?.id ?? ''
+                            firstObra.id
                           )
+                        )
+
+                        const associatedPatients =
+                          pacientes.filter(
+                            (paciente) =>
+                              paciente.obraSocialId ===
+                              firstObra.id
+                          )
+
+                        setInvoicePatientId(
+                          associatedPatients.length >
+                          0
+                            ? String(
+                                associatedPatients[0]
+                                  .id
+                              )
+                            : ''
                         )
                       }}
                       className={`tab ${
@@ -617,7 +803,205 @@ function App() {
                     </button>
                   </div>
 
-                  <div className="mt-5 rounded-md border border-emerald-900/10 bg-emerald-50 p-4">
+                  {/* FACTURA A PACIENTE */}
+                  {targetKind ===
+                    'paciente' && (
+                    <div className="grid gap-5 md:grid-cols-2">
+                      <Field label="Paciente">
+                        <select
+                          value={targetId}
+                          onChange={(event) =>
+                            setTargetId(
+                              event.target.value
+                            )
+                          }
+                        >
+                          {pacientes.length ===
+                          0 ? (
+                            <option value="">
+                              No hay pacientes
+                            </option>
+                          ) : (
+                            pacientes.map(
+                              (paciente) => (
+                                <option
+                                  key={
+                                    paciente.id
+                                  }
+                                  value={
+                                    paciente.id
+                                  }
+                                >
+                                  {
+                                    paciente.apellido
+                                  }
+                                  ,{' '}
+                                  {
+                                    paciente.nombre
+                                  }{' '}
+                                  — DNI{' '}
+                                  {
+                                    paciente.dni
+                                  }
+                                </option>
+                              )
+                            )
+                          )}
+                        </select>
+                      </Field>
+
+                      <Field label="Importe total">
+                        <input
+                          value={amount}
+                          onChange={(event) =>
+                            setAmount(
+                              event.target.value
+                            )
+                          }
+                          inputMode="decimal"
+                          placeholder="1000"
+                        />
+                      </Field>
+                    </div>
+                  )}
+
+                  {/* FACTURA A OBRA SOCIAL */}
+                  {targetKind === 'obra' && (
+                    <div className="space-y-5">
+                      <div className="grid gap-5 md:grid-cols-2">
+                        <Field label="Obra social">
+                          <select
+                            value={
+                              targetId
+                            }
+                            onChange={(
+                              event
+                            ) => {
+                              const obraId =
+                                event.target
+                                  .value
+
+                              setTargetId(
+                                obraId
+                              )
+
+                              const patients =
+                                pacientes.filter(
+                                  (paciente) =>
+                                    paciente.obraSocialId ===
+                                    Number(
+                                      obraId
+                                    )
+                                )
+
+                              setInvoicePatientId(
+                                patients.length >
+                                0
+                                  ? String(
+                                      patients[0]
+                                        .id
+                                    )
+                                  : ''
+                              )
+                            }}
+                          >
+                            {obras.length ===
+                            0 ? (
+                              <option value="">
+                                No hay obras sociales
+                              </option>
+                            ) : (
+                              obras.map(
+                                (obra) => (
+                                  <option
+                                    key={
+                                      obra.id
+                                    }
+                                    value={
+                                      obra.id
+                                    }
+                                  >
+                                    {
+                                      obra.nombre
+                                    }
+                                  </option>
+                                )
+                              )
+                            )}
+                          </select>
+                        </Field>
+
+                        <Field label="Paciente">
+                          <select
+                            value={
+                              invoicePatientId
+                            }
+                            onChange={(
+                              event
+                            ) =>
+                              setInvoicePatientId(
+                                event.target
+                                  .value
+                              )
+                            }
+                            disabled={
+                              invoicePatients.length ===
+                              0
+                            }
+                          >
+                            {invoicePatients.length ===
+                            0 ? (
+                              <option value="">
+                                No hay pacientes asociados
+                                a esta obra social
+                              </option>
+                            ) : (
+                              invoicePatients.map(
+                                (paciente) => (
+                                  <option
+                                    key={
+                                      paciente.id
+                                    }
+                                    value={
+                                      paciente.id
+                                    }
+                                  >
+                                    {
+                                      paciente.apellido
+                                    }
+                                    ,{' '}
+                                    {
+                                      paciente.nombre
+                                    }{' '}
+                                    — DNI{' '}
+                                    {
+                                      paciente.dni
+                                    }
+                                  </option>
+                                )
+                              )
+                            )}
+                          </select>
+                        </Field>
+                      </div>
+
+                      <Field label="Importe total">
+                        <input
+                          value={amount}
+                          onChange={(event) =>
+                            setAmount(
+                              event.target.value
+                            )
+                          }
+                          inputMode="decimal"
+                          placeholder="1000"
+                        />
+                      </Field>
+                    </div>
+                  )}
+
+                  {/* RESUMEN */}
+                  <div className="mt-5 rounded-md border border-emerald-900/10 bg-emerald-50 p-5">
                     <div className="flex items-center justify-between gap-4">
                       <div>
                         <b className="text-sm text-emerald-950">
@@ -628,19 +1012,60 @@ function App() {
                           Servicios profesionales
                           psicopedagógicos
                         </p>
+
+                        {targetKind ===
+                          'obra' &&
+                          invoicePatientId && (
+                            <p className="mt-2 text-sm font-medium text-emerald-900">
+                              {(() => {
+                                const patient =
+                                  invoicePatients.find(
+                                    (item) =>
+                                      item.id ===
+                                      Number(
+                                        invoicePatientId
+                                      )
+                                  )
+
+                                if (!patient) {
+                                  return null
+                                }
+
+                                return (
+                                  <>
+                                    Paciente:{' '}
+                                    {
+                                      patient.apellido
+                                    }{' '}
+                                    {
+                                      patient.nombre
+                                    }{' '}
+                                    — DNI{' '}
+                                    {
+                                      patient.dni
+                                    }
+                                  </>
+                                )
+                              })()}
+                            </p>
+                          )}
                       </div>
 
-                      <span className="text-xl font-bold text-emerald-950">
+                      <span className="text-2xl font-bold text-emerald-950">
                         $
                         {Number(
-                          amount
-                            .replace(',', '.') ||
-                            0
-                        ).toLocaleString('es-AR')}
+                          amount.replace(
+                            ',',
+                            '.'
+                          ) || 0
+                        ).toLocaleString(
+                          'es-AR'
+                        )}
                       </span>
                     </div>
                   </div>
 
+                  {/* BOTÓN */}
                   <button
                     type="button"
                     onClick={downloadPdf}
@@ -656,6 +1081,7 @@ function App() {
         </main>
       </div>
 
+      {/* MODAL PACIENTE */}
       {showPatientForm && (
         <Modal
           title={
@@ -670,11 +1096,14 @@ function App() {
             obras={obras}
             setData={setPatient}
             save={savePatient}
-            editing={patientId !== null}
+            editing={
+              patientId !== null
+            }
           />
         </Modal>
       )}
 
+      {/* MODAL OBRA SOCIAL */}
       {showObraForm && (
         <Modal
           title={
@@ -707,7 +1136,10 @@ const Title = ({
 }) => (
   <div className="flex flex-wrap items-end justify-between gap-4">
     <div>
-     
+      <p className="text-xs font-bold uppercase text-emerald-700">
+        Gestión
+      </p>
+
       <h1 className="mt-1 text-4xl font-bold text-emerald-700">
         {title}
       </h1>
@@ -749,7 +1181,10 @@ const Modal = ({
   <div
     className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 p-4"
     onMouseDown={(event) => {
-      if (event.target === event.currentTarget) {
+      if (
+        event.target ===
+        event.currentTarget
+      ) {
         onClose()
       }
     }}
@@ -825,9 +1260,11 @@ function PatientsTable({
 
               <td>
                 {obras.find(
-                  (o) =>
-                    o.id === x.obraSocialId
-                )?.nombre ?? 'Particular'}
+                  (obra) =>
+                    obra.id ===
+                    x.obraSocialId
+                )?.nombre ??
+                  'Particular'}
               </td>
 
               <td>
@@ -847,7 +1284,9 @@ function PatientsTable({
               <td className="actions">
                 <button
                   type="button"
-                  onClick={() => edit(x)}
+                  onClick={() =>
+                    edit(x)
+                  }
                   title="Editar"
                 >
                   <Pencil size={16} />
@@ -855,7 +1294,9 @@ function PatientsTable({
 
                 <button
                   type="button"
-                  onClick={() => remove(x.id)}
+                  onClick={() =>
+                    remove(x.id)
+                  }
                   title="Eliminar"
                 >
                   <Trash2 size={16} />
@@ -928,7 +1369,9 @@ function ObrasTable({
               <td className="actions">
                 <button
                   type="button"
-                  onClick={() => edit(x)}
+                  onClick={() =>
+                    edit(x)
+                  }
                   title="Editar"
                 >
                   <Pencil size={16} />
@@ -936,7 +1379,9 @@ function ObrasTable({
 
                 <button
                   type="button"
-                  onClick={() => remove(x.id)}
+                  onClick={() =>
+                    remove(x.id)
+                  }
                   title="Eliminar"
                 >
                   <Trash2 size={16} />
@@ -980,7 +1425,8 @@ function PatientForm({
             onChange={(event) =>
               setData({
                 ...data,
-                nombre: event.target.value,
+                nombre:
+                  event.target.value,
               })
             }
           />
@@ -1044,7 +1490,9 @@ function PatientForm({
 
       <Field label="Obra social">
         <select
-          value={data.obraSocialId ?? ''}
+          value={
+            data.obraSocialId ?? ''
+          }
           onChange={(event) =>
             setData({
               ...data,
@@ -1127,7 +1575,8 @@ function ObraForm({
           onChange={(event) =>
             setData({
               ...data,
-              nombre: event.target.value,
+              nombre:
+                event.target.value,
             })
           }
         />
@@ -1140,7 +1589,8 @@ function ObraForm({
           onChange={(event) =>
             setData({
               ...data,
-              cuit: event.target.value,
+              cuit:
+                event.target.value,
             })
           }
         />
@@ -1149,7 +1599,9 @@ function ObraForm({
       <Field label="Domicilio comercial">
         <input
           required
-          value={data.domicilioComercial}
+          value={
+            data.domicilioComercial
+          }
           onChange={(event) =>
             setData({
               ...data,
@@ -1210,4 +1662,3 @@ function ObraForm({
 }
 
 export default App
-

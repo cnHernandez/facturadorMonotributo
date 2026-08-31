@@ -46,24 +46,31 @@ namespace Back.Services
             await _repository.DeleteAsync(id);
             return true;
         }
+private static void Apply(ObraSocialDTO dto, ObraSocial obraSocial)
+{
+    obraSocial.Cuit = dto.Cuit;
+    obraSocial.Nombre = dto.Nombre;
+    obraSocial.DomicilioComercial = dto.DomicilioComercial;
 
-        private static void Apply(ObraSocialDTO dto, ObraSocial obraSocial)
-        {
-            obraSocial.Cuit = dto.Cuit;
-            obraSocial.Nombre = dto.Nombre;
-            obraSocial.DomicilioComercial = dto.DomicilioComercial;
-            obraSocial.Condicion = dto.Condicion;
-            obraSocial.Estado = dto.Estado;
-        }
+    obraSocial.Mail = string.IsNullOrWhiteSpace(dto.Mail)
+        ? null
+        : dto.Mail.Trim();
 
-        private static ObraSocialResponseDTO ToResponse(ObraSocial obraSocial) => new()
-        {
-            Id = obraSocial.Id,
-            Cuit = obraSocial.Cuit,
-            Nombre = obraSocial.Nombre,
-            DomicilioComercial = obraSocial.DomicilioComercial,
-            Condicion = obraSocial.Condicion,
-            Estado = obraSocial.Estado
-        };
+    obraSocial.CondicionIVA = dto.CondicionIVA;
+    obraSocial.Condicion = dto.Condicion;
+    obraSocial.Estado = dto.Estado;
+}
+
+     private static ObraSocialResponseDTO ToResponse(ObraSocial obraSocial) => new()
+{
+    Id = obraSocial.Id,
+    Cuit = obraSocial.Cuit,
+    Nombre = obraSocial.Nombre,
+    DomicilioComercial = obraSocial.DomicilioComercial,
+    Mail = obraSocial.Mail,
+    CondicionIVA = obraSocial.CondicionIVA,
+    Condicion = obraSocial.Condicion,
+    Estado = obraSocial.Estado
+};
     }
 }

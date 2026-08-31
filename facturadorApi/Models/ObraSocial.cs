@@ -6,6 +6,8 @@ namespace Back.Models
         public string Cuit { get; set; } = null!;
         public string Nombre { get; set; } = null!;
         public string DomicilioComercial { get; set; } = null!;
+        public string? Mail { get; set; }
+        public CondicionObraSocialIVA CondicionIVA { get; set; }
         public CondicionObraSocial Condicion { get; set; }
         public bool Estado { get; set; }
         public ICollection<Paciente> Pacientes { get; set; } = new List<Paciente>();

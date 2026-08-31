@@ -17,6 +17,11 @@ namespace Back.DTOs
         [Required]
         public CondicionObraSocial Condicion { get; set; }
 
+        public CondicionObraSocialIVA CondicionIVA { get; set; }
+
+        [EmailAddress, StringLength(150)]
+        public string? Mail { get; set; }
+
         public bool Estado { get; set; }
     }
 

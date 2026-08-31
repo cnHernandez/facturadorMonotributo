@@ -12,32 +12,57 @@ public class AppDbContext : DbContext
     {
     }
 
-    protected override void OnModelCreating(ModelBuilder modelBuilder)
+   protected override void OnModelCreating(ModelBuilder modelBuilder)
+{
+    base.OnModelCreating(modelBuilder);
+
+    UniqueConstraintsConfig.ApplyUniqueConstraints(modelBuilder);
+    SeedData.Configure(modelBuilder);
+
+    // Mail de Obra Social es opcional
+    modelBuilder.Entity<ObraSocial>()
+        .Property(x => x.Mail)
+        .IsRequired(false)
+        .HasMaxLength(150);
+
+    // Excluir campos específicos de la conversión automática a mayúsculas
+    foreach (var entityType in modelBuilder.Model.GetEntityTypes())
     {
-        base.OnModelCreating(modelBuilder);
-        UniqueConstraintsConfig.ApplyUniqueConstraints(modelBuilder);
-        SeedData.Configure(modelBuilder);
-
-        // Excluir campos específicos de la conversión automática a mayúsculas
-        foreach (var entityType in modelBuilder.Model.GetEntityTypes())
+        foreach (var property in entityType.GetProperties())
         {
-            foreach (var property in entityType.GetProperties())
+            if (property.ClrType == typeof(string) &&
+                property.Name == "Password")
             {
-                if (property.ClrType == typeof(string) && property.Name == "Password")
-                    property.SetValueConverter((ValueConverter?)null);
+                property.SetValueConverter((ValueConverter?)null);
+            }
 
-                if (property.ClrType == typeof(string) && property.Name == "Email")
-                    property.SetValueConverter((ValueConverter?)null);
+            if (property.ClrType == typeof(string) &&
+                property.Name == "Email")
+            {
+                property.SetValueConverter((ValueConverter?)null);
+            }
 
-                if (property.ClrType == typeof(string) && property.Name == "UserName")
-                    property.SetValueConverter((ValueConverter?)null);
+            // IMPORTANTE: agregar Mail
+            if (property.ClrType == typeof(string) &&
+                property.Name == "Mail")
+            {
+                property.SetValueConverter((ValueConverter?)null);
+            }
 
-                if (property.ClrType == typeof(string) && property.Name == "Notas")
-                    property.SetValueConverter((ValueConverter?)null);
+            if (property.ClrType == typeof(string) &&
+                property.Name == "UserName")
+            {
+                property.SetValueConverter((ValueConverter?)null);
+            }
+
+            if (property.ClrType == typeof(string) &&
+                property.Name == "Notas")
+            {
+                property.SetValueConverter((ValueConverter?)null);
             }
         }
     }
-
+}
     protected override void ConfigureConventions(ModelConfigurationBuilder configurationBuilder)
     {
         // Aplica el convertidor de capitalización a todos los strings

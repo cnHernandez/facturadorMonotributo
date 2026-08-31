@@ -18,8 +18,14 @@ type Paciente = {
   apellido: string
   domicilio: string
   estado: boolean
+  Observaciones: string
   obraSocialId?: number | null
 }
+
+type CondicionObraSocialIVA =
+  | 'IVA_Sujeto_Exento'
+  | 'ResponsableInscripto'
+  | 'Consumidor_Final'
 
 type Obra = {
   id: number
@@ -27,6 +33,8 @@ type Obra = {
   nombre: string
   domicilioComercial: string
   condicion: 'Contado' | 'CuentaCorriente'
+  mail: string
+  condicionIVA: CondicionObraSocialIVA
   estado: boolean
 }
 
@@ -40,12 +48,15 @@ const patientBlank = (): Omit<Paciente, 'id'> => ({
   domicilio: '',
   estado: true,
   obraSocialId: null,
+  Observaciones: '',
 })
 
 const obraBlank = (): Omit<Obra, 'id'> => ({
   cuit: '',
   nombre: '',
   domicilioComercial: '',
+  mail: '',
+  condicionIVA: 'IVA_Sujeto_Exento',
   condicion: 'Contado',
   estado: true,
 })
@@ -259,6 +270,7 @@ function App() {
     event.preventDefault()
 
     try {
+     
       const data = await api(
         obraId
           ? `/api/obras-sociales/${obraId}`
@@ -488,6 +500,11 @@ function App() {
       : Number(
           selectedObra!.cuit.replaceAll('-', '')
         ),
+
+        condicionIVAReceptor:
+  targetKind === 'obra'
+    ? selectedObra!.condicionIVA
+    : 'Consumidor_Final',
 
   nombreReceptor:
     targetKind === 'paciente'
@@ -1611,6 +1628,43 @@ function ObraForm({
           }
         />
       </Field>
+     <Field label="Mail">
+  <input
+    type="email"
+    value={data.mail ?? ''}
+    onChange={(event) =>
+      setData({
+        ...data,
+        mail: event.target.value,
+      })
+    }
+  />
+</Field>
+
+<Field label="Condición frente al IVA">
+  <select
+    value={data.condicionIVA}
+    onChange={(event) =>
+      setData({
+        ...data,
+        condicionIVA:
+          event.target.value as CondicionObraSocialIVA,
+      })
+    }
+  >
+    <option value="IVA_Sujeto_Exento">
+      IVA Sujeto Exento
+    </option>
+
+    <option value="ResponsableInscripto">
+      Responsable Inscripto
+    </option>
+
+    <option value="Consumidor_Final">
+      Consumidor Final
+    </option>
+  </select>
+</Field>
 
       <Field label="Condición">
         <select

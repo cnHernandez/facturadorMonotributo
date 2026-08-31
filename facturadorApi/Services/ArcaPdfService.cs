@@ -18,377 +18,623 @@ namespace Back.Services
         {
             _options = options.Value;
         }
-
-        public byte[] GenerarFacturaC(
-            ArcaSolicitudCaeDTO solicitud,
-            ArcaCaeResponseDTO comprobante)
-        {
-            var culturaArgentina =
-                new CultureInfo("es-AR");
-
-            var fechaComprobante =
-                solicitud.FechaComprobante
-                ?? DateOnly.FromDateTime(DateTime.Today);
-
-            var receptor =
-                string.IsNullOrWhiteSpace(solicitud.NombreReceptor)
-                    ? "Consumidor final"
-                    : solicitud.NombreReceptor;
-
-            var esObraSocial =
-                solicitud.TipoDocumentoReceptor == 80;
-
-            var documentoReceptor =
-                FormatearDocumento(
-                    solicitud.NumeroDocumentoReceptor,
-                    solicitud.TipoDocumentoReceptor);
-
-            var tipoDocumento =
-                esObraSocial
-                    ? "CUIT"
-                    : "DNI";
-
-            var qrData =
-                GenerarQr(
-                    comprobante,
-                    solicitud);
-
-            return Document.Create(container =>
-            {
-                container.Page(page =>
-                {
-                    page.Size(PageSizes.A4);
-                    page.Margin(30);
-
-                    page.DefaultTextStyle(
-                        style => style.FontSize(9));
-
-                    // =========================================
-                    // ENCABEZADO
-                    // =========================================
-
-          // Encabezado
-page.Header().Column(column =>
+private void CrearPaginaFactura(
+    IDocumentContainer container,
+    string copia,
+    ArcaSolicitudCaeDTO solicitud,
+    ArcaCaeResponseDTO comprobante,
+    DateOnly fechaComprobante,
+    string receptor,
+    string tipoDocumento,
+    string documentoReceptor,
+    string descripcion,
+    byte[]? qrData,
+    CultureInfo culturaArgentina)
 {
-    column.Item().Row(row =>
+     var esObraSocial =
+        solicitud.TipoDocumentoReceptor == 80;
+    container.Page(page =>
     {
-        // Letra C
-        row.ConstantItem(80)
-            .AlignCenter()
-            .Text("C")
-            .FontSize(72)
-            .Bold()
-            .FontColor(Colors.Grey.Lighten2);
+        page.Size(PageSizes.A4);
+        page.Margin(10);
+        page.DefaultTextStyle(
+            x => x
+                .FontSize(8)
+                .FontFamily(Fonts.Arial));
 
-        // Título
-        row.RelativeItem()
-            .AlignCenter()
-            .Column(centerColumn =>
-            {
-                centerColumn.Item()
-                    .Text("FACTURA C")
-                    .FontSize(24)
-                    .Bold();
-            });
+        page.Content().Column(column =>
+        {
+            column.Spacing(0);
 
-        // Datos del comprobante
-        row.RelativeItem()
-            .Column(rightColumn =>
-            {
-                rightColumn.Item()
-                    .Text($"Punto de Venta: {comprobante.PuntoDeVenta:0000}")
-                    .FontSize(9)
-                    .Bold();
+            // =====================================================
+            // ORIGINAL / DUPLICADO / TRIPLICADO
+            // =====================================================
+            column.Item()
+                .Border(1)
+                .Height(28)
+                .AlignCenter()
+                .AlignMiddle()
+                .Text(copia)
+                .Bold()
+                .FontSize(15);
 
-                rightColumn.Item()
-                    .PaddingTop(6)
-                    .Text($"Comprobante: {comprobante.NumeroComprobante:00000000}")
-                    .FontSize(9)
-                    .Bold();
-            });
-    });
-
-    column.Item()
-        .PaddingTop(16)
-        .LineHorizontal(1f);
-});
-
-                    // =========================================
-                    // CONTENIDO
-                    // =========================================
-
-                    page.Content()
-                        .PaddingVertical(10)
-                        .Column(column =>
+            // =====================================================
+            // ENCABEZADO PRINCIPAL
+            // =====================================================
+            column.Item()
+                .BorderLeft(1)
+                .BorderRight(1)
+                .BorderBottom(1)
+                .Height(126)
+                .Row(row =>
+                {
+                    // DATOS EMISOR
+                    row.RelativeItem(1.2f)
+                        .Padding(8)
+                        .Column(left =>
                         {
-                            column.Spacing(12);
+                            left.Item()
+                                .PaddingLeft(32)
+                                .PaddingTop(8)
+                                .Text(_options.NombreEmisor.ToUpperInvariant())
+                                .Bold()
+                                .FontSize(10);
 
-                            // =================================
-                            // DATOS DEL EMISOR
-                            // =================================
-
-                            column.Item().Row(row =>
-                            {
-                                row.RelativeItem()
-                                    .Column(emColumn =>
-                                    {
-                                        emColumn.Item()
-                                            .Text("DATOS DEL EMISOR")
-                                            .FontSize(9)
-                                            .Bold()
-                                            .Underline();
-
-                                        emColumn.Item()
-                                            .PaddingTop(4)
-                                            .Text("Nombre / Razón Social")
-                                            .FontSize(8)
-                                            .Italic();
-
-                                        emColumn.Item()
-                                            .Text(_options.NombreEmisor)
-                                            .FontSize(10)
-                                            .Bold();
-
-                                        emColumn.Item()
-                                            .PaddingTop(4)
-                                            .Text(
-                                                $"CUIT: {FormatearCuit(_options.CuitEmisor)}")
-                                            .FontSize(9);
-
-                                        emColumn.Item()
-                                            .Text(
-                                                $"Domicilio: {_options.DomicilioComercial}")
-                                            .FontSize(9);
-
-                                        emColumn.Item()
-                                            .Text(
-                                                "Condición ante el IVA: RESPONSABLE MONOTRIBUTO")
-                                            .FontSize(9);
-                                    });
-
-                                // QR + fecha
-                                row.ConstantItem(120)
-                                    .AlignCenter()
-                                    .Column(qrColumn =>
-                                    {
-                                        qrColumn.Item()
-                                            .Text("Fecha de emisión")
-                                            .FontSize(8)
-                                            .Italic();
-
-                                        qrColumn.Item()
-                                            .Text(
-                                                $"{fechaComprobante:dd/MM/yyyy}")
-                                            .FontSize(10)
-                                            .Bold();
-
-                                        if (qrData != null)
-                                        {
-                                            qrColumn.Item()
-                                                .PaddingTop(8)
-                                                .Image(qrData);
-                                        }
-                                    });
-                            });
-
-                            column.Item()
-                                .PaddingVertical(8)
-                                .LineHorizontal(1f);
-
-                            // =================================
-                            // DATOS DEL RECEPTOR
-                            // =================================
-
-                            column.Item()
-                                .Column(recColumn =>
+                            left.Item()
+                                .PaddingTop(34)
+                                .Text(text =>
                                 {
-                                    recColumn.Item()
-                                        .Text("DATOS DEL RECEPTOR")
-                                        .FontSize(9)
-                                        .Bold()
-                                        .Underline();
-
-                                    recColumn.Item()
-                                        .PaddingTop(4)
-                                        .Text("Nombre / Razón Social")
-                                        .FontSize(8)
-                                        .Italic();
-
-                                    recColumn.Item()
-                                        .Text(receptor)
-                                        .FontSize(10)
-                                        .Bold();
-
-                                    recColumn.Item()
-                                        .Text(
-                                            $"{tipoDocumento}: {documentoReceptor}")
-                                        .FontSize(9);
-
-                                    if (!string.IsNullOrWhiteSpace(
-                                            solicitud.DomicilioReceptor))
-                                    {
-                                        recColumn.Item()
-                                            .Text(
-                                                $"Domicilio: {solicitud.DomicilioReceptor}")
-                                            .FontSize(9);
-                                    }
+                                    text.Span("Razón Social: ").Bold();
+                                    text.Span(_options.NombreEmisor);
                                 });
 
-                            column.Item()
-                                .PaddingVertical(8)
-                                .LineHorizontal(1f);
-
-                            // =================================
-                            // DETALLE
-                            // =================================
-
-                            column.Item()
-                                .Column(detColumn =>
+                            left.Item()
+                                .PaddingTop(7)
+                                .Text(text =>
                                 {
-                                    detColumn.Item()
-                                        .Row(row =>
-                                        {
-                                            row.RelativeItem()
-                                                .Text("Descripción")
-                                                .FontSize(9)
-                                                .Bold();
-
-                                            row.ConstantItem(100)
-                                                .AlignRight()
-                                                .Text("Importe")
-                                                .FontSize(9)
-                                                .Bold();
-                                        });
-
-                                    detColumn.Item()
-                                        .LineHorizontal(0.5f);
-
-                                    var descripcion =
-                                        ObtenerDescripcionServicio(
-                                            solicitud.PacienteNombre,
-                                            solicitud.PacienteDni,
-                                            solicitud.TipoDocumentoReceptor);
-
-                                    detColumn.Item()
-                                        .Row(row =>
-                                        {
-                                            row.RelativeItem()
-                                                .Text(descripcion)
-                                                .FontSize(9);
-
-                                            row.ConstantItem(100)
-                                                .AlignRight()
-                                                .Text(
-                                                    solicitud.ImporteTotal
-                                                        .ToString(
-                                                            "C2",
-                                                            culturaArgentina))
-                                                .FontSize(9);
-                                        });
-
-                                    detColumn.Item()
-                                        .LineHorizontal(0.5f);
-
-                                    detColumn.Item()
-                                        .AlignRight()
-                                        .Row(row =>
-                                        {
-                                            row.ConstantItem(150)
-                                                .AlignRight()
-                                                .Text("TOTAL")
-                                                .FontSize(10)
-                                                .Bold();
-
-                                            row.ConstantItem(100)
-                                                .AlignRight()
-                                                .Text(
-                                                    solicitud.ImporteTotal
-                                                        .ToString(
-                                                            "C2",
-                                                            culturaArgentina))
-                                                .FontSize(11)
-                                                .Bold();
-                                        });
+                                    text.Span("Domicilio Comercial: ").Bold();
+                                    text.Span(_options.DomicilioComercial);
                                 });
 
-                            column.Item()
-                                .PaddingVertical(8)
-                                .LineHorizontal(1f);
-
-                            // =================================
-                            // CAE
-                            // =================================
-
-                            column.Item()
-                                .Row(row =>
+                            left.Item()
+                                .PaddingTop(7)
+                                .Text(text =>
                                 {
-                                    row.RelativeItem()
-                                        .Column(caeColumn =>
-                                        {
-                                            caeColumn.Item()
-                                                .Text("AUTORIZACIÓN ARCA")
-                                                .FontSize(9)
-                                                .Bold()
-                                                .Underline();
-
-                                            caeColumn.Item()
-                                                .PaddingTop(4)
-                                                .Text("CAE")
-                                                .FontSize(8)
-                                                .Italic();
-
-                                            caeColumn.Item()
-                                                .Text(comprobante.Cae)
-                                                .FontSize(12)
-                                                .Bold();
-
-                                            caeColumn.Item()
-                                                .PaddingTop(4)
-                                                .Text("Vencimiento CAE")
-                                                .FontSize(8)
-                                                .Italic();
-
-                                            caeColumn.Item()
-                                                .Text(
-                                                    comprobante
-                                                        .FechaVencimientoCae
-                                                        .ToString("dd/MM/yyyy"))
-                                                .FontSize(10)
-                                                .Bold();
-                                        });
-
-                                    row.ConstantItem(1);
+                                    text.Span("Condición frente al IVA: ").Bold();
+                                    text.Span("Responsable Monotributo");
                                 });
                         });
 
-                    // =========================================
-                    // FOOTER
-                    // =========================================
+                    // LETRA C
+                    row.ConstantItem(58)
+                        .BorderLeft(1)
+                        .BorderRight(1)
+                        .AlignTop()
+                        .Column(letter =>
+                        {
+                            letter.Item()
+                                .AlignCenter()
+                                .PaddingTop(6)
+                                .Text("C")
+                                .Bold()
+                                .FontSize(28);
 
-                    page.Footer().Column(column =>
-                    {
-                        column.Item()
-                            .LineHorizontal(1f);
+                            letter.Item()
+                                .AlignCenter()
+                                .Text("COD. 011")
+                                .Bold()
+                                .FontSize(7);
+                        });
 
-                        column.Item()
-                            .PaddingTop(4)
-                            .AlignCenter()
-                            .Text(
-                                "Comprobante autorizado por ARCA - AFIP en modo Homologación")
-                            .FontSize(8)
-                            .Italic();
+                    // DATOS FACTURA
+                    row.RelativeItem(1.15f)
+                        .Padding(8)
+                        .Column(right =>
+                        {
+                            right.Item()
+                                .PaddingTop(5)
+                                .Text("FACTURA")
+                                .Bold()
+                                .FontSize(19);
 
-                        column.Item()
-                            .AlignCenter()
-                            .Text(
-                                "Este documento no tiene validez fiscal hasta ser autorizado por ARCA")
-                            .FontSize(7)
-                            .FontColor(
-                                Colors.Red.Medium);
-                    });
+                            right.Item()
+                                .PaddingTop(14)
+                                .Text(text =>
+                                {
+                                    text.Span("Punto de Venta: ").Bold();
+                                    text.Span(
+                                        comprobante.PuntoDeVenta
+                                            .ToString("00000"))
+                                        .Bold();
+
+                                    text.Span("     Comp. Nro: ").Bold();
+
+                                    text.Span(
+                                        comprobante.NumeroComprobante
+                                            .ToString("00000000"))
+                                        .Bold();
+                                });
+
+                            right.Item()
+                                .PaddingTop(7)
+                                .Text(text =>
+                                {
+                                    text.Span("Fecha de Emisión: ").Bold();
+                                    text.Span(
+                                        fechaComprobante
+                                            .ToString("dd/MM/yyyy"))
+                                        .Bold();
+                                });
+
+                            right.Item()
+                                .PaddingTop(11)
+                                .Text(text =>
+                                {
+                                    text.Span("CUIT: ").Bold();
+                                    text.Span(
+                                        _options.CuitEmisor.ToString());
+                                });
+
+                            right.Item()
+                                .Text(text =>
+                                {
+                                    text.Span("Ingresos Brutos: ").Bold();
+                                    text.Span(
+                                        _options.CuitEmisor.ToString());
+                                });
+
+                            right.Item()
+                                .Text(text =>
+                                {
+                                    text.Span("Fecha de Inicio de Actividades: ")
+                                        .Bold();
+
+                                    text.Span("01/03/2010");
+                                });
+                        });
                 });
-            }).GeneratePdf();
-        }
+
+            // =====================================================
+            // PERIODO FACTURADO
+            // Por ahora replicas la apariencia.
+            // Después lo vinculamos al DTO si agregás las fechas.
+            // =====================================================
+            column.Item()
+                .BorderLeft(1)
+                .BorderRight(1)
+                .BorderBottom(1)
+                .Height(30)
+                .PaddingHorizontal(7)
+                .AlignMiddle()
+                .Row(row =>
+                {
+                    row.RelativeItem()
+                        .Text(text =>
+                        {
+                            text.Span("Período Facturado Desde: ")
+                                .Bold();
+
+                            text.Span(
+                                new DateOnly(
+                                    fechaComprobante.Year,
+                                    fechaComprobante.Month,
+                                    1)
+                                .ToString("dd/MM/yyyy"));
+                        });
+
+                    row.RelativeItem()
+                        .Text(text =>
+                        {
+                            var ultimoDia =
+                                DateTime.DaysInMonth(
+                                    fechaComprobante.Year,
+                                    fechaComprobante.Month);
+
+                            text.Span("Hasta: ").Bold();
+
+                            text.Span(
+                                new DateOnly(
+                                    fechaComprobante.Year,
+                                    fechaComprobante.Month,
+                                    ultimoDia)
+                                .ToString("dd/MM/yyyy"));
+                        });
+
+                    row.RelativeItem()
+                        .Text(text =>
+                        {
+                            text.Span(
+                                "Fecha de Vto. para el pago: ")
+                                .Bold();
+
+                            text.Span(
+                                fechaComprobante
+                                    .AddDays(22)
+                                    .ToString("dd/MM/yyyy"));
+                        });
+                });
+
+            // =====================================================
+            // RECEPTOR
+            // =====================================================
+            column.Item()
+                .BorderLeft(1)
+                .BorderRight(1)
+                .BorderBottom(1)
+                .Height(72)
+                .Padding(7)
+                .Column(rec =>
+                {
+                    rec.Item().Row(row =>
+                    {
+                        row.RelativeItem()
+                            .Text(text =>
+                            {
+                                text.Span($"{tipoDocumento}: ")
+                                    .Bold();
+
+                                text.Span(documentoReceptor);
+                            });
+
+                        row.RelativeItem(2.2f)
+                            .Text(text =>
+                            {
+                                text.Span(
+                                    "Apellido y Nombre / Razón Social: ")
+                                    .Bold();
+
+                                text.Span(receptor);
+                            });
+                    });
+
+                    rec.Item()
+                        .PaddingTop(9)
+                        .Row(row =>
+                        {
+                            row.RelativeItem()
+                                .Text(text =>
+                                {
+                                    text.Span(
+                                        "Condición frente al IVA: ")
+                                        .Bold();
+
+                                    text.Span(
+                                        esObraSocial
+                                            ? "Responsable Inscripto"
+                                            : "Consumidor Final");
+                                });
+
+                            row.RelativeItem(2.2f)
+                                .Text(text =>
+                                {
+                                    text.Span("Domicilio: ").Bold();
+
+                                    text.Span(
+                                        solicitud.DomicilioReceptor
+                                        ?? string.Empty);
+                                });
+                        });
+
+                    rec.Item()
+                        .PaddingTop(9)
+                        .Text(text =>
+                        {
+                            text.Span("Condición de venta: ").Bold();
+                            text.Span("Contado");
+                        });
+                });
+
+            // =====================================================
+            // TABLA
+            // =====================================================
+            column.Item()
+                .PaddingTop(2)
+                .Table(table =>
+                {
+                    table.ColumnsDefinition(columns =>
+                    {
+                        columns.ConstantColumn(45);
+                        columns.RelativeColumn(3);
+                        columns.ConstantColumn(70);
+                        columns.ConstantColumn(55);
+                        columns.ConstantColumn(80);
+                        columns.ConstantColumn(55);
+                        columns.ConstantColumn(70);
+                        columns.ConstantColumn(85);
+                    });
+
+                    HeaderCell(table, "Código");
+                    HeaderCell(table, "Producto / Servicio");
+                    HeaderCell(table, "Cantidad");
+                    HeaderCell(table, "U. Medida");
+                    HeaderCell(table, "Precio Unit.");
+                    HeaderCell(table, "% Bonif");
+                    HeaderCell(table, "Imp. Bonif.");
+                    HeaderCell(table, "Subtotal");
+
+                    BodyCell(table, "");
+                    BodyCell(table, descripcion.ToUpperInvariant());
+                    BodyCell(table, "1,00", true);
+                    BodyCell(table, "unidades", true);
+
+                    BodyCell(
+                        table,
+                        solicitud.ImporteTotal.ToString(
+                            "N2",
+                            culturaArgentina),
+                        true);
+
+                    BodyCell(table, "0,00", true);
+                    BodyCell(table, "0,00", true);
+
+                    BodyCell(
+                        table,
+                        solicitud.ImporteTotal.ToString(
+                            "N2",
+                            culturaArgentina),
+                        true);
+                });
+
+            // Espacio grande, como factura ARCA
+            column.Item()
+                .Height(235);
+
+            // =====================================================
+            // TOTALES
+            // =====================================================
+            column.Item()
+                .Border(1)
+                .Height(105)
+                .Padding(12)
+                .AlignBottom()
+                .AlignRight()
+                .Column(total =>
+                {
+                    total.Item()
+                        .AlignRight()
+                        .Text(text =>
+                        {
+                            text.Span("Subtotal: $     ")
+                                .Bold();
+
+                            text.Span(
+                                solicitud.ImporteTotal.ToString(
+                                    "N2",
+                                    culturaArgentina))
+                                .Bold();
+                        });
+
+                    total.Item()
+                        .PaddingTop(9)
+                        .AlignRight()
+                        .Text(text =>
+                        {
+                            text.Span(
+                                "Importe Otros Tributos: $     ")
+                                .Bold();
+
+                            text.Span("0,00").Bold();
+                        });
+
+                    total.Item()
+                        .PaddingTop(9)
+                        .AlignRight()
+                        .Text(text =>
+                        {
+                            text.Span("Importe Total: $     ")
+                                .Bold();
+
+                            text.Span(
+                                solicitud.ImporteTotal.ToString(
+                                    "N2",
+                                    culturaArgentina))
+                                .Bold()
+                                .FontSize(10);
+                        });
+                });
+
+            // =====================================================
+            // PIE
+            // =====================================================
+            column.Item()
+                .PaddingTop(8)
+                .Height(110)
+                .Row(row =>
+                {
+                    // QR
+                    row.ConstantItem(110)
+                        .PaddingLeft(10)
+                        .PaddingTop(5)
+                        .Element(qr =>
+                        {
+                            if (qrData != null)
+                            {
+                                qr.Image(qrData);
+                            }
+                        });
+
+                    // ARCA
+                    row.RelativeItem()
+                        .PaddingTop(9)
+                        .Column(arca =>
+                        {
+                            arca.Item()
+                                .Text("ARCA")
+                                .Bold()
+                                .FontSize(24);
+
+                            arca.Item()
+                                .Text(
+                                    "AGENCIA DE RECAUDACIÓN Y CONTROL ADUANERO")
+                                .FontSize(5);
+
+                            arca.Item()
+                                .PaddingTop(14)
+                                .Text("Comprobante Autorizado")
+                                .Bold()
+                                .Italic();
+
+                            arca.Item()
+                                .PaddingTop(11)
+                                .Text(
+                                    "Esta Agencia no se responsabiliza por los datos ingresados en el detalle de la operación")
+                                .Italic()
+                                .FontSize(6);
+                        });
+
+                    // PAGINA
+                    row.ConstantItem(85)
+                        .PaddingTop(12)
+                        .AlignCenter()
+                        .Text("Pág. 1/1")
+                        .Bold()
+                        .FontSize(9);
+
+                    // CAE
+                    row.RelativeItem()
+                        .PaddingTop(9)
+                        .AlignRight()
+                        .Column(cae =>
+                        {
+                            cae.Item()
+                                .AlignRight()
+                                .Text(
+                                    $"CAE N°: {comprobante.Cae}")
+                                .Bold()
+                                .FontSize(9);
+
+                            cae.Item()
+                                .PaddingTop(7)
+                                .AlignRight()
+                                .Text(
+                                    $"Fecha de Vto. de CAE: " +
+                                    comprobante
+                                        .FechaVencimientoCae
+                                        .ToString("dd/MM/yyyy"))
+                                .Bold()
+                                .FontSize(9);
+                        });
+                });
+        });
+    });
+}
+private static void HeaderCell(
+    TableDescriptor table,
+    string texto)
+{
+    table.Cell()
+        .Background(Colors.Grey.Lighten2)
+        .Border(0.7f)
+        .PaddingVertical(4)
+        .PaddingHorizontal(2)
+        .AlignCenter()
+        .AlignMiddle()
+        .Text(texto)
+        .Bold()
+        .FontSize(7);
+}
+
+private static void BodyCell(
+    TableDescriptor table,
+    string texto,
+    bool center = false)
+{
+    var cell =
+        table.Cell()
+            .PaddingVertical(5)
+            .PaddingHorizontal(3);
+
+    if (center)
+    {
+        cell.AlignCenter()
+            .Text(texto)
+            .FontSize(7);
+    }
+    else
+    {
+        cell.Text(texto)
+            .FontSize(7);
+    }
+}
+       public byte[] GenerarFacturaC(
+    ArcaSolicitudCaeDTO solicitud,
+    ArcaCaeResponseDTO comprobante)
+{
+    var culturaArgentina = new CultureInfo("es-AR");
+
+    var fechaComprobante =
+        solicitud.FechaComprobante
+        ?? DateOnly.FromDateTime(DateTime.Today);
+
+    var receptor =
+        string.IsNullOrWhiteSpace(solicitud.NombreReceptor)
+            ? "Consumidor Final"
+            : solicitud.NombreReceptor;
+
+    var esObraSocial =
+        solicitud.TipoDocumentoReceptor == 80;
+
+    var documentoReceptor =
+        FormatearDocumento(
+            solicitud.NumeroDocumentoReceptor,
+            solicitud.TipoDocumentoReceptor);
+
+    var tipoDocumento =
+        esObraSocial ? "CUIT" : "DNI";
+
+    var qrData =
+        GenerarQr(
+            comprobante,
+            solicitud);
+
+    var descripcion =
+        ObtenerDescripcionServicio(
+            solicitud.PacienteNombre,
+            solicitud.PacienteDni,
+            solicitud.TipoDocumentoReceptor);
+
+    return Document.Create(container =>
+    {
+        CrearPaginaFactura(
+            container,
+            "ORIGINAL",
+            solicitud,
+            comprobante,
+            fechaComprobante,
+            receptor,
+            tipoDocumento,
+            documentoReceptor,
+            descripcion,
+            qrData,
+            culturaArgentina);
+
+        CrearPaginaFactura(
+            container,
+            "DUPLICADO",
+            solicitud,
+            comprobante,
+            fechaComprobante,
+            receptor,
+            tipoDocumento,
+            documentoReceptor,
+            descripcion,
+            qrData,
+            culturaArgentina);
+
+        CrearPaginaFactura(
+            container,
+            "TRIPLICADO",
+            solicitud,
+            comprobante,
+            fechaComprobante,
+            receptor,
+            tipoDocumento,
+            documentoReceptor,
+            descripcion,
+            qrData,
+            culturaArgentina);
+    }).GeneratePdf();
+}
 
         private string FormatearCuit(long cuit)
         {

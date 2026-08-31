@@ -34,14 +34,33 @@ namespace Back.Repositories
             await _context.SaveChangesAsync();
         }
 
-        public async Task DeleteAsync(int id)
-        {
-            var entity = await _dbSet.FindAsync(id);
-            if (entity != null)
-            {
-                _dbSet.Remove(entity);
-                await _context.SaveChangesAsync();
-            }
-        }
+       public async Task DeleteAsync(int id)
+{
+    var entity = await _context.Set<T>().FindAsync(id);
+
+    if (entity == null)
+        return;
+
+    var estadoProperty =
+        entity.GetType().GetProperty("Estado");
+
+    if (estadoProperty != null &&
+        estadoProperty.PropertyType == typeof(bool))
+    {
+        estadoProperty.SetValue(entity, false);
+
+        _context.Set<T>().Update(entity);
+
+        await _context.SaveChangesAsync();
+
+        return;
+    }
+
+    // Si alguna entidad no tiene Estado,
+    // se mantiene el borrado físico tradicional.
+    _context.Set<T>().Remove(entity);
+
+    await _context.SaveChangesAsync();
+}
     }
 }

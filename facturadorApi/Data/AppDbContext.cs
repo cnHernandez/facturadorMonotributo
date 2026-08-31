@@ -37,10 +37,12 @@ public class AppDbContext : DbContext
             }
 
             if (property.ClrType == typeof(string) &&
-                property.Name == "Email")
+                property.Name == "Observaciones")
             {
-                property.SetValueConverter((ValueConverter?)null);
+                     property.SetValueConverter((ValueConverter?)null);
             }
+
+
 
             // IMPORTANTE: agregar Mail
             if (property.ClrType == typeof(string) &&

@@ -56,6 +56,7 @@ namespace Back.Services
             paciente.Domicilio = dto.Domicilio;
             paciente.PlanillaAsistenciaImagenUrl = dto.PlanillaAsistenciaImagenUrl;
             paciente.Estado = dto.Estado;
+             paciente.Observaciones = dto.Observaciones ?? "";
             paciente.ObraSocialId = dto.ObraSocialId;
         }
 
@@ -69,6 +70,7 @@ namespace Back.Services
             Domicilio = paciente.Domicilio,
             PlanillaAsistenciaImagenUrl = paciente.PlanillaAsistenciaImagenUrl,
             Estado = paciente.Estado,
+            Observaciones = paciente.Observaciones,
             ObraSocialId = paciente.ObraSocialId
         };
     }

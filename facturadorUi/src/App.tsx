@@ -18,7 +18,7 @@ type Paciente = {
   apellido: string
   domicilio: string
   estado: boolean
-  Observaciones: string
+  observaciones: string
   obraSocialId?: number | null
 }
 
@@ -48,7 +48,7 @@ const patientBlank = (): Omit<Paciente, 'id'> => ({
   domicilio: '',
   estado: true,
   obraSocialId: null,
-  Observaciones: '',
+  observaciones: '',
 })
 
 const obraBlank = (): Omit<Obra, 'id'> => ({
@@ -127,10 +127,12 @@ function App() {
     ])
       .then(([patientData, obraData]) => {
         const loadedPatients =
-          (patientData || []) as Paciente[]
+  ((patientData || []) as Paciente[])
+    .filter((x) => x.estado)
 
-        const loadedObras =
-          (obraData || []) as Obra[]
+const loadedObras =
+  ((obraData || []) as Obra[])
+    .filter((x) => x.estado)
 
         setPacientes(loadedPatients)
         setObras(loadedObras)
@@ -948,6 +950,8 @@ function App() {
                           </select>
                         </Field>
 
+                        
+
                         <Field label="Paciente">
                           <select
                             value={
@@ -1026,8 +1030,7 @@ function App() {
                         </b>
 
                         <p className="mt-1 text-sm text-emerald-900/65">
-                          Servicios profesionales
-                          psicopedagógicos
+                          HONORARIOS PROFESIONALES POR SESIONES DE PSICOPEDAGOGIA
                         </p>
 
                         {targetKind ===
@@ -1153,10 +1156,7 @@ const Title = ({
 }) => (
   <div className="flex flex-wrap items-end justify-between gap-4">
     <div>
-      <p className="text-xs font-bold uppercase text-emerald-700">
-        Gestión
-      </p>
-
+    
       <h1 className="mt-1 text-4xl font-bold text-emerald-700">
         {title}
       </h1>
@@ -1536,6 +1536,20 @@ function PatientForm({
           ))}
         </select>
       </Field>
+
+      <Field label="Observaciones">
+  <textarea
+    value={data.observaciones ?? ''}
+    onChange={(event) =>
+      setData({
+        ...data,
+        observaciones: event.target.value,
+      })
+    }
+    rows={4}
+    placeholder="Observaciones del paciente..."
+  />
+</Field>
 
       <label className="flex gap-2 text-sm">
         <input

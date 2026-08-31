@@ -22,7 +22,7 @@ namespace Back.DTOs
         [Url, StringLength(500)]
         public string? PlanillaAsistenciaImagenUrl { get; set; }
 
-        public string Observaciones { get; set; } = null!;
+        public string? Observaciones { get; set; }
 
         public bool Estado { get; set; }
         public int? ObraSocialId { get; set; }

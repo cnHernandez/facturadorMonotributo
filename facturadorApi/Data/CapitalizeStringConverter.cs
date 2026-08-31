@@ -6,9 +6,18 @@ namespace Back.Data
     {
         public CapitalizeStringConverter()
             : base(
-                v => v == null ? v! : string.Concat(v[0].ToString().ToUpper(), v.Substring(1)),
-                v => v)
+                value => Capitalize(value),
+                value => value
+            )
         {
+        }
+
+        private static string Capitalize(string value)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+                return value;
+
+            return char.ToUpper(value[0]) + value.Substring(1);
         }
     }
 }

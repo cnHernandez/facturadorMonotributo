@@ -9,7 +9,7 @@ namespace Back.Models
         public string Apellido { get; set; } = null!;
         public string Domicilio { get; set; } = null!;
         public string? PlanillaAsistenciaImagenUrl { get; set; }
-        public string Observaciones { get; set; } = null!;
+        public string Observaciones { get; set; } = "";
         public bool Estado { get; set; }
         public int? ObraSocialId { get; set; }
         public ObraSocial? ObraSocial { get; set; }

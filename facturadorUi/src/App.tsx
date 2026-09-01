@@ -83,7 +83,24 @@ async function api(
     : response.json()
 }
 
+function ultimoDiaMesAnterior() {
+  const hoy = new Date()
+
+  const fecha = new Date(
+    hoy.getFullYear(),
+    hoy.getMonth(),
+    0
+  )
+
+  const year = fecha.getFullYear()
+  const month = String(fecha.getMonth() + 1).padStart(2, '0')
+  const day = String(fecha.getDate()).padStart(2, '0')
+
+  return `${year}-${month}-${day}`
+}
+
 function App() {
+  const maxFechaFacturacion = ultimoDiaMesAnterior()
   const [view, setView] = useState<View>('pacientes')
   const [message, setMessage] = useState('Cargando datos...')
 
@@ -481,19 +498,37 @@ const loadedObras =
         .includes('OSDE') || false
 
     // Validar fechas
-    if (!fechaDesde || !fechaHasta) {
-      setMessage(
-        'Ingresá el período facturado (desde - hasta)'
-      )
-      return
-    }
+    
+if (!fechaDesde || !fechaHasta) {
+  setMessage(
+    'Ingresá el período facturado (desde - hasta)'
+  )
+  return
+}
 
-    if (!fechaVencimiento) {
-      setMessage(
-        'Ingresá la fecha de vencimiento'
-      )
-      return
-    }
+if (
+  fechaDesde > maxFechaFacturacion ||
+  fechaHasta > maxFechaFacturacion
+) {
+  setMessage(
+    'El período facturado debe ser anterior al mes actual'
+  )
+  return
+}
+
+if (fechaDesde > fechaHasta) {
+  setMessage(
+    'La fecha desde no puede ser posterior a la fecha hasta'
+  )
+  return
+}
+
+if (!fechaVencimiento) {
+  setMessage(
+    'Ingresá la fecha de vencimiento'
+  )
+  return
+}
 
     // Calcular importe total
     let numericAmount = 0
@@ -963,17 +998,16 @@ const loadedObras =
                         </Field>
 
                         <Field label="Cantidad de sesiones">
-                          <input
-                            value={cantidadSesiones}
-                            onChange={(event) =>
-                              setCantidadSesiones(
-                                event.target.value
-                              )
-                            }
-                            inputMode="numeric"
-                            placeholder="1"
-                          />
-                        </Field>
+  <input
+    type="number"
+    min="1"
+    step="1"
+    value={cantidadSesiones}
+    onChange={(event) =>
+      setCantidadSesiones(event.target.value)
+    }
+  />
+</Field>
                       </div>
 
                       <div className="grid gap-5 md:grid-cols-2">
@@ -994,29 +1028,27 @@ const loadedObras =
                       </div>
 
                       <div className="grid gap-5 md:grid-cols-3">
-                        <Field label="Período desde">
-                          <input
-                            type="date"
-                            value={fechaDesde}
-                            onChange={(event) =>
-                              setFechaDesde(
-                                event.target.value
-                              )
-                            }
-                          />
-                        </Field>
+                       <Field label="Período desde">
+  <input
+    type="date"
+    max={maxFechaFacturacion}
+    value={fechaDesde}
+    onChange={(event) =>
+      setFechaDesde(event.target.value)
+    }
+  />
+</Field>
 
-                        <Field label="Período hasta">
-                          <input
-                            type="date"
-                            value={fechaHasta}
-                            onChange={(event) =>
-                              setFechaHasta(
-                                event.target.value
-                              )
-                            }
-                          />
-                        </Field>
+<Field label="Período hasta">
+  <input
+    type="date"
+    max={maxFechaFacturacion}
+    value={fechaHasta}
+    onChange={(event) =>
+      setFechaHasta(event.target.value)
+    }
+  />
+</Field>
 
                         <Field label="Fecha de Vto.">
                           <input
@@ -1188,16 +1220,15 @@ const loadedObras =
                           <>
                             <div className="grid gap-5 md:grid-cols-2">
                               <Field label="Cantidad de sesiones">
-                                <input
-                                  value={cantidadSesiones}
-                                  onChange={(event) =>
-                                    setCantidadSesiones(
-                                      event.target.value
-                                    )
-                                  }
-                                  inputMode="numeric"
-                                  placeholder="1"
-                                />
+                               <input
+  type="number"
+  min="1"
+  step="1"
+  value={cantidadSesiones}
+  onChange={(event) =>
+    setCantidadSesiones(event.target.value)
+  }
+/>
                               </Field>
 
                               <Field label="Precio por sesión">
@@ -1218,29 +1249,27 @@ const loadedObras =
                       })()}
 
                       <div className="grid gap-5 md:grid-cols-3">
-                        <Field label="Período desde">
-                          <input
-                            type="date"
-                            value={fechaDesde}
-                            onChange={(event) =>
-                              setFechaDesde(
-                                event.target.value
-                              )
-                            }
-                          />
-                        </Field>
+                       <Field label="Período desde">
+  <input
+    type="date"
+    max={maxFechaFacturacion}
+    value={fechaDesde}
+    onChange={(event) =>
+      setFechaDesde(event.target.value)
+    }
+  />
+</Field>
 
-                        <Field label="Período hasta">
-                          <input
-                            type="date"
-                            value={fechaHasta}
-                            onChange={(event) =>
-                              setFechaHasta(
-                                event.target.value
-                              )
-                            }
-                          />
-                        </Field>
+<Field label="Período hasta">
+  <input
+    type="date"
+    max={maxFechaFacturacion}
+    value={fechaHasta}
+    onChange={(event) =>
+      setFechaHasta(event.target.value)
+    }
+  />
+</Field>
 
                         <Field label="Fecha de Vto.">
                           <input

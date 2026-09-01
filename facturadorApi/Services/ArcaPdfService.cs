@@ -691,9 +691,14 @@ private static void BodyCell(
             int tipoDocumento)
         {
             var mesAnio = fechaFacturacion.ToString("MMMM yyyy", new CultureInfo("es-AR")).ToUpper();
-            
+
             var descripcionBase =
                 $"HONORARIOS PROFESIONALES POR SESIONES DE PSICOPEDAGOGIA CORRESPONDIENTE AL MES {mesAnio}";
+
+            var afiliado =
+                string.IsNullOrWhiteSpace(pacienteNumAfiliado)
+                    ? string.Empty
+                    : $" AF: {pacienteNumAfiliado}";
 
             if (tipoDocumento == 80)
             {
@@ -702,15 +707,10 @@ private static void BodyCell(
                         ? "Paciente no informado"
                         : pacienteNombre;
 
-                var afiliado =
-                    string.IsNullOrWhiteSpace(pacienteNumAfiliado)
-                        ? string.Empty
-                        : $" + AF: {pacienteNumAfiliado}";
-
                 return $"{descripcionBase} PACIENTE: {nombrePaciente}{afiliado}";
             }
 
-            return descripcionBase;
+            return $"{descripcionBase}{afiliado}";
         }
 
     private byte[]? GenerarQr(

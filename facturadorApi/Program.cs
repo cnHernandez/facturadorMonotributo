@@ -111,6 +111,7 @@ try
     .AddJsonOptions(options =>
     {
         options.JsonSerializerOptions.Converters.Add(new DecimalJsonConverter());
+        options.JsonSerializerOptions.Converters.Add(new DateOnlyJsonConverter());
         options.JsonSerializerOptions.Converters.Add(new System.Text.Json.Serialization.JsonStringEnumConverter());
     });
 
@@ -123,7 +124,17 @@ try
 
     // Registra IHttpClientFactory
     builder.Services.AddHttpClient();
-    builder.Services.AddHttpClient("ArcaWsaa", client => client.Timeout = TimeSpan.FromSeconds(30));
+    builder.Services.AddHttpClient("ArcaWsaa", client => 
+    {
+        client.Timeout = TimeSpan.FromSeconds(30);
+    })
+    .ConfigurePrimaryHttpMessageHandler(() =>
+    {
+        var handler = new HttpClientHandler();
+        // En desarrollo, ignorar validación de certificados SSL de AFIP
+        handler.ServerCertificateCustomValidationCallback = (message, cert, chain, errors) => true;
+        return handler;
+    });
     builder.Services.AddMemoryCache();
 
     // Registro de repositories y services

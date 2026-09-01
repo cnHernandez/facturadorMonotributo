@@ -45,9 +45,14 @@ namespace Back.Controllers
         {
             var comprobante = await _wsfeService.SolicitarCaeAsync(solicitud, cancellationToken);
             var pdf = _pdfService.GenerarFacturaC(solicitud, comprobante);
-            var fileName = $"factura-c-{comprobante.PuntoDeVenta:0000}-{comprobante.NumeroComprobante:00000000}.pdf";
+            var fileName = $"FacturaC-{comprobante.NumeroComprobante:00000000}.pdf";
 
-            return File(pdf, "application/pdf", fileName);
+            var result = new FileContentResult(pdf, "application/pdf")
+            {
+                FileDownloadName = fileName
+            };
+
+            return result;
         }
     }
 }

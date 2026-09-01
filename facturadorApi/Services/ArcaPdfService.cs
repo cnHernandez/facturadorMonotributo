@@ -33,6 +33,11 @@ private void CrearPaginaFactura(
 {
      var esObraSocial =
         solicitud.TipoDocumentoReceptor == 80;
+    var subtotal = !solicitud.EsFacturacionManual &&
+        solicitud.CantidadSesiones.HasValue &&
+        solicitud.PrecioSesion.HasValue
+            ? solicitud.CantidadSesiones.Value * solicitud.PrecioSesion.Value
+            : solicitud.ImporteTotal;
     container.Page(page =>
     {
         page.Size(PageSizes.A4);
@@ -196,8 +201,6 @@ private void CrearPaginaFactura(
 
             // =====================================================
             // PERIODO FACTURADO
-            // Por ahora replicas la apariencia.
-            // Después lo vinculamos al DTO si agregás las fechas.
             // =====================================================
             column.Item()
                 .BorderLeft(1)
@@ -214,43 +217,45 @@ private void CrearPaginaFactura(
                             text.Span("Período Facturado Desde: ")
                                 .Bold();
 
-                            text.Span(
+                            var fechaDesde = solicitud.FechaDesde ?? 
                                 new DateOnly(
                                     fechaComprobante.Year,
                                     fechaComprobante.Month,
-                                    1)
-                                .ToString("dd/MM/yyyy"));
+                                    1);
+
+                            text.Span(fechaDesde.ToString("dd/MM/yyyy"));
                         });
 
                     row.RelativeItem()
                         .Text(text =>
                         {
-                            var ultimoDia =
-                                DateTime.DaysInMonth(
+                            var ultimoDia = solicitud.FechaHasta.HasValue 
+                                ? solicitud.FechaHasta.Value
+                                : new DateOnly(
                                     fechaComprobante.Year,
-                                    fechaComprobante.Month);
+                                    fechaComprobante.Month,
+                                    DateTime.DaysInMonth(
+                                        fechaComprobante.Year,
+                                        fechaComprobante.Month));
 
                             text.Span("Hasta: ").Bold();
-
-                            text.Span(
-                                new DateOnly(
-                                    fechaComprobante.Year,
-                                    fechaComprobante.Month,
-                                    ultimoDia)
-                                .ToString("dd/MM/yyyy"));
+                            text.Span(ultimoDia.ToString("dd/MM/yyyy"));
                         });
 
                     row.RelativeItem()
                         .Text(text =>
                         {
+                            var fechaVto = solicitud.FechaVencimiento ?? 
+                                new DateOnly(
+                                    fechaComprobante.Year,
+                                    fechaComprobante.Month,
+                                    10).AddMonths(1);
+
                             text.Span(
                                 "Fecha de Vto. para el pago: ")
                                 .Bold();
 
-                            text.Span(
-                                fechaComprobante
-                                    .AddDays(22)
-                                    .ToString("dd/MM/yyyy"));
+                            text.Span(fechaVto.ToString("dd/MM/yyyy"));
                         });
                 });
 
@@ -353,23 +358,25 @@ private void CrearPaginaFactura(
                     HeaderCell(table, "Subtotal");
 
                     BodyCell(table, "");
-                    BodyCell(table, descripcion.ToUpperInvariant());
-                    BodyCell(table, "1,00", true);
+                    BodyCell(table, descripcion);
+
+                    var cantidad = solicitud.CantidadSesiones.HasValue
+                        ? solicitud.CantidadSesiones.Value.ToString("N2", culturaArgentina)
+                        : "1,00";
+                    BodyCell(table, cantidad, true);
                     BodyCell(table, "unidades", true);
 
-                    BodyCell(
-                        table,
-                        solicitud.ImporteTotal.ToString(
-                            "N2",
-                            culturaArgentina),
-                        true);
+                    var precioUnitario = solicitud.PrecioSesion.HasValue
+                        ? solicitud.PrecioSesion.Value.ToString("N2", culturaArgentina)
+                        : solicitud.ImporteTotal.ToString("N2", culturaArgentina);
+                    BodyCell(table, precioUnitario, true);
 
                     BodyCell(table, "0,00", true);
                     BodyCell(table, "0,00", true);
 
                     BodyCell(
                         table,
-                        solicitud.ImporteTotal.ToString(
+                        subtotal.ToString(
                             "N2",
                             culturaArgentina),
                         true);
@@ -398,7 +405,7 @@ private void CrearPaginaFactura(
                                 .Bold();
 
                             text.Span(
-                                solicitud.ImporteTotal.ToString(
+                                subtotal.ToString(
                                     "N2",
                                     culturaArgentina))
                                 .Bold();
@@ -425,7 +432,7 @@ private void CrearPaginaFactura(
                                 .Bold();
 
                             text.Span(
-                                solicitud.ImporteTotal.ToString(
+                                subtotal.ToString(
                                     "N2",
                                     culturaArgentina))
                                 .Bold()
@@ -591,6 +598,8 @@ private static void BodyCell(
         ObtenerDescripcionServicio(
             solicitud.PacienteNombre,
             solicitud.PacienteDni,
+            solicitud.PacienteNumAfiliado,
+            solicitud.FechaDesde ?? solicitud.FechaComprobante ?? DateOnly.FromDateTime(DateTime.Today),
             solicitud.TipoDocumentoReceptor);
 
     return Document.Create(container =>
@@ -677,8 +686,15 @@ private static void BodyCell(
         private string ObtenerDescripcionServicio(
             string? pacienteNombre,
             string? pacienteDni,
+            string? pacienteNumAfiliado,
+            DateOnly fechaFacturacion,
             int tipoDocumento)
         {
+            var mesAnio = fechaFacturacion.ToString("MMMM yyyy", new CultureInfo("es-AR")).ToUpper();
+            
+            var descripcionBase =
+                $"HONORARIOS PROFESIONALES POR SESIONES DE PSICOPEDAGOGIA CORRESPONDIENTE AL MES {mesAnio}";
+
             if (tipoDocumento == 80)
             {
                 var nombrePaciente =
@@ -686,16 +702,15 @@ private static void BodyCell(
                         ? "Paciente no informado"
                         : pacienteNombre;
 
-                var dniPaciente =
-                    string.IsNullOrWhiteSpace(pacienteDni)
+                var afiliado =
+                    string.IsNullOrWhiteSpace(pacienteNumAfiliado)
                         ? string.Empty
-                        : $" - DNI: {pacienteDni}";
+                        : $" + AF: {pacienteNumAfiliado}";
 
-                return
-                    $"Sesiones profesionales de psicopedagogía - Paciente: {nombrePaciente}{dniPaciente}";
+                return $"{descripcionBase} PACIENTE: {nombrePaciente}{afiliado}";
             }
 
-            return "Sesiones profesionales de psicopedagogía";
+            return descripcionBase;
         }
 
     private byte[]? GenerarQr(

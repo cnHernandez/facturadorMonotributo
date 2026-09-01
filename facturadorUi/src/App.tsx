@@ -120,6 +120,21 @@ function App() {
   const [amount, setAmount] =
     useState('1000')
 
+  const [cantidadSesiones, setCantidadSesiones] =
+    useState('1')
+
+  const [precioSesion, setPrecioSesion] =
+    useState('1000')
+
+  const [fechaDesde, setFechaDesde] =
+    useState('')
+
+  const [fechaHasta, setFechaHasta] =
+    useState('')
+
+  const [fechaVencimiento, setFechaVencimiento] =
+    useState('')
+
   useEffect(() => {
     Promise.all([
       api('/api/pacientes', 'GET'),
@@ -459,9 +474,45 @@ const loadedObras =
       return
     }
 
-    const numericAmount = Number(
-      amount.replace(',', '.')
-    )
+    // Detectar si es OSDE
+    const esOsde =
+      selectedObra?.nombre
+        ?.toUpperCase()
+        .includes('OSDE') || false
+
+    // Validar fechas
+    if (!fechaDesde || !fechaHasta) {
+      setMessage(
+        'Ingresá el período facturado (desde - hasta)'
+      )
+      return
+    }
+
+    if (!fechaVencimiento) {
+      setMessage(
+        'Ingresá la fecha de vencimiento'
+      )
+      return
+    }
+
+    // Calcular importe total
+    let numericAmount = 0
+    
+    if (esOsde) {
+      // Para OSDE, usar el importe manual
+      numericAmount = Number(
+        amount.replace(',', '.')
+      )
+    } else {
+      // Para otros casos, calcular cantidad × precio
+      const cantidad = Number(
+        cantidadSesiones.replace(',', '.') || 1
+      )
+      const precio = Number(
+        precioSesion.replace(',', '.') || 0
+      )
+      numericAmount = cantidad * precio
+    }
 
     if (
       !Number.isFinite(numericAmount) ||
@@ -469,6 +520,20 @@ const loadedObras =
     ) {
       setMessage(
         'Ingresá un importe válido'
+      )
+      return
+    }
+
+    if (esOsde && !amount) {
+      setMessage(
+        'Ingresá un importe válido para OSDE'
+      )
+      return
+    }
+
+    if (!esOsde && (!cantidadSesiones || !precioSesion)) {
+      setMessage(
+        'Ingresá cantidad de sesiones y precio'
       )
       return
     }
@@ -486,50 +551,64 @@ const loadedObras =
             'Content-Type':
               'application/json',
           },
-         body: JSON.stringify({
-  tipoComprobante: 11,
+          body: JSON.stringify({
+            tipoComprobante: 11,
 
-  tipoDocumentoReceptor:
-    targetKind === 'paciente'
-      ? 96
-      : 80,
+            tipoDocumentoReceptor:
+              targetKind === 'paciente'
+                ? 96
+                : 80,
 
-  numeroDocumentoReceptor:
-    targetKind === 'paciente'
-      ? Number(
-          selectedPatient!.dni.replaceAll('-', '')
-        )
-      : Number(
-          selectedObra!.cuit.replaceAll('-', '')
-        ),
+            numeroDocumentoReceptor:
+              targetKind === 'paciente'
+                ? Number(
+                    selectedPatient!.dni.replaceAll('-', '')
+                  )
+                : Number(
+                    selectedObra!.cuit.replaceAll('-', '')
+                  ),
 
-        condicionIVAReceptor:
-  targetKind === 'obra'
-    ? selectedObra!.condicionIVA
-    : 'Consumidor_Final',
+            condicionIVAReceptor:
+              targetKind === 'obra'
+                ? selectedObra!.condicionIVA
+                : 'Consumidor_Final',
 
-  nombreReceptor:
-    targetKind === 'paciente'
-      ? `${selectedPatient!.nombre} ${selectedPatient!.apellido}`
-      : selectedObra!.nombre,
+            nombreReceptor:
+              targetKind === 'paciente'
+                ? `${selectedPatient!.nombre} ${selectedPatient!.apellido}`
+                : selectedObra!.nombre,
 
-  domicilioReceptor:
-    targetKind === 'paciente'
-      ? selectedPatient!.domicilio
-      : selectedObra!.domicilioComercial,
+            domicilioReceptor:
+              targetKind === 'paciente'
+                ? selectedPatient!.domicilio
+                : selectedObra!.domicilioComercial,
 
-  importeTotal: numericAmount,
+            importeTotal: numericAmount,
 
-  pacienteNombre:
-    selectedPatient
-      ? `${selectedPatient.nombre} ${selectedPatient.apellido}`
-      : null,
+            cantidadSesiones: esOsde ? undefined : Number(cantidadSesiones),
+            precioSesion: esOsde ? undefined : Number(precioSesion),
 
-  pacienteDni:
-    selectedPatient
-      ? selectedPatient.dni
-      : null,
-})
+            fechaDesde,
+            fechaHasta,
+            fechaVencimiento,
+
+            esFacturacionManual: esOsde,
+
+            pacienteNombre:
+              selectedPatient
+                ? `${selectedPatient.nombre} ${selectedPatient.apellido}`
+                : null,
+
+            pacienteDni:
+              selectedPatient
+                ? selectedPatient.dni
+                : null,
+
+            pacienteNumAfiliado:
+              selectedPatient
+                ? selectedPatient.numAfiliado
+                : null,
+          }),
         }
       )
 
@@ -564,8 +643,21 @@ const loadedObras =
         document.createElement('a')
 
       link.href = url
-      link.download =
-        'factura-c.pdf'
+      
+      // Obtener nombre del archivo del header Content-Disposition
+      const contentDisposition = response.headers.get('content-disposition')
+      let fileName = 'factura.pdf'
+      
+      if (contentDisposition) {
+        // Intentar extraer filename de: attachment; filename="FacturaC-00000001.pdf"
+        const filenameRegex = /filename[^;=\n]*=(?:UTF-8'')?(?:"([^"]*)"|'([^']*)'|([^;\n]*))/i
+        const matches = contentDisposition.match(filenameRegex)
+        if (matches && (matches[1] || matches[2] || matches[3])) {
+          fileName = (matches[1] || matches[2] || matches[3]).trim()
+        }
+      }
+      
+      link.download = fileName
 
       document.body.appendChild(link)
 
@@ -825,62 +917,119 @@ const loadedObras =
                   {/* FACTURA A PACIENTE */}
                   {targetKind ===
                     'paciente' && (
-                    <div className="grid gap-5 md:grid-cols-2">
-                      <Field label="Paciente">
-                        <select
-                          value={targetId}
-                          onChange={(event) =>
-                            setTargetId(
-                              event.target.value
-                            )
-                          }
-                        >
-                          {pacientes.length ===
-                          0 ? (
-                            <option value="">
-                              No hay pacientes
-                            </option>
-                          ) : (
-                            pacientes.map(
-                              (paciente) => (
-                                <option
-                                  key={
-                                    paciente.id
-                                  }
-                                  value={
-                                    paciente.id
-                                  }
-                                >
-                                  {
-                                    paciente.apellido
-                                  }
-                                  ,{' '}
-                                  {
-                                    paciente.nombre
-                                  }{' '}
-                                  — DNI{' '}
-                                  {
-                                    paciente.dni
-                                  }
-                                </option>
+                    <div className="space-y-5">
+                      <div className="grid gap-5 md:grid-cols-2">
+                        <Field label="Paciente">
+                          <select
+                            value={targetId}
+                            onChange={(event) =>
+                              setTargetId(
+                                event.target.value
                               )
-                            )
-                          )}
-                        </select>
-                      </Field>
+                            }
+                          >
+                            {pacientes.length ===
+                            0 ? (
+                              <option value="">
+                                No hay pacientes
+                              </option>
+                            ) : (
+                              pacientes.map(
+                                (paciente) => (
+                                  <option
+                                    key={
+                                      paciente.id
+                                    }
+                                    value={
+                                      paciente.id
+                                    }
+                                  >
+                                    {
+                                      paciente.apellido
+                                    }
+                                    ,{' '}
+                                    {
+                                      paciente.nombre
+                                    }{' '}
+                                    — DNI{' '}
+                                    {
+                                      paciente.dni
+                                    }
+                                  </option>
+                                )
+                              )
+                            )}
+                          </select>
+                        </Field>
 
-                      <Field label="Importe total">
-                        <input
-                          value={amount}
-                          onChange={(event) =>
-                            setAmount(
-                              event.target.value
-                            )
-                          }
-                          inputMode="decimal"
-                          placeholder="1000"
-                        />
-                      </Field>
+                        <Field label="Cantidad de sesiones">
+                          <input
+                            value={cantidadSesiones}
+                            onChange={(event) =>
+                              setCantidadSesiones(
+                                event.target.value
+                              )
+                            }
+                            inputMode="numeric"
+                            placeholder="1"
+                          />
+                        </Field>
+                      </div>
+
+                      <div className="grid gap-5 md:grid-cols-2">
+                        <Field label="Precio por sesión">
+                          <input
+                            value={precioSesion}
+                            onChange={(event) =>
+                              setPrecioSesion(
+                                event.target.value
+                              )
+                            }
+                            inputMode="decimal"
+                            placeholder="1000"
+                          />
+                        </Field>
+
+                        <div />
+                      </div>
+
+                      <div className="grid gap-5 md:grid-cols-3">
+                        <Field label="Período desde">
+                          <input
+                            type="date"
+                            value={fechaDesde}
+                            onChange={(event) =>
+                              setFechaDesde(
+                                event.target.value
+                              )
+                            }
+                          />
+                        </Field>
+
+                        <Field label="Período hasta">
+                          <input
+                            type="date"
+                            value={fechaHasta}
+                            onChange={(event) =>
+                              setFechaHasta(
+                                event.target.value
+                              )
+                            }
+                          />
+                        </Field>
+
+                        <Field label="Fecha de Vto.">
+                          <input
+                            type="date"
+                            value={fechaVencimiento}
+                            onChange={(event) =>
+                              setFechaVencimiento(
+                                event.target.value
+                              )
+                            }
+                          />
+                        </Field>
+                      </div>
                     </div>
                   )}
 
@@ -1006,18 +1155,105 @@ const loadedObras =
                         </Field>
                       </div>
 
-                      <Field label="Importe total">
-                        <input
-                          value={amount}
-                          onChange={(event) =>
-                            setAmount(
-                              event.target.value
-                            )
-                          }
-                          inputMode="decimal"
-                          placeholder="1000"
-                        />
-                      </Field>
+                      {/* Si es OSDE, mostrar importe manual */}
+                      {(() => {
+                        const obraSeleccionada =
+                          obras.find(
+                            (obra) =>
+                              obra.id ===
+                              Number(targetId)
+                          )
+                        const esOsde =
+                          obraSeleccionada?.nombre
+                            ?.toUpperCase()
+                            .includes('OSDE')
+                        
+                        return esOsde ? (
+                          <div className="grid gap-5 md:grid-cols-2">
+                            <Field label="Importe total">
+                              <input
+                                value={amount}
+                                onChange={(event) =>
+                                  setAmount(
+                                    event.target.value
+                                  )
+                                }
+                                inputMode="decimal"
+                                placeholder="1000"
+                              />
+                            </Field>
+                            <div />
+                          </div>
+                        ) : (
+                          <>
+                            <div className="grid gap-5 md:grid-cols-2">
+                              <Field label="Cantidad de sesiones">
+                                <input
+                                  value={cantidadSesiones}
+                                  onChange={(event) =>
+                                    setCantidadSesiones(
+                                      event.target.value
+                                    )
+                                  }
+                                  inputMode="numeric"
+                                  placeholder="1"
+                                />
+                              </Field>
+
+                              <Field label="Precio por sesión">
+                                <input
+                                  value={precioSesion}
+                                  onChange={(event) =>
+                                    setPrecioSesion(
+                                      event.target.value
+                                    )
+                                  }
+                                  inputMode="decimal"
+                                  placeholder="1000"
+                                />
+                              </Field>
+                            </div>
+                          </>
+                        )
+                      })()}
+
+                      <div className="grid gap-5 md:grid-cols-3">
+                        <Field label="Período desde">
+                          <input
+                            type="date"
+                            value={fechaDesde}
+                            onChange={(event) =>
+                              setFechaDesde(
+                                event.target.value
+                              )
+                            }
+                          />
+                        </Field>
+
+                        <Field label="Período hasta">
+                          <input
+                            type="date"
+                            value={fechaHasta}
+                            onChange={(event) =>
+                              setFechaHasta(
+                                event.target.value
+                              )
+                            }
+                          />
+                        </Field>
+
+                        <Field label="Fecha de Vto.">
+                          <input
+                            type="date"
+                            value={fechaVencimiento}
+                            onChange={(event) =>
+                              setFechaVencimiento(
+                                event.target.value
+                              )
+                            }
+                          />
+                        </Field>
+                      </div>
                     </div>
                   )}
 
@@ -1073,14 +1309,38 @@ const loadedObras =
 
                       <span className="text-2xl font-bold text-emerald-950">
                         $
-                        {Number(
-                          amount.replace(
-                            ',',
-                            '.'
-                          ) || 0
-                        ).toLocaleString(
-                          'es-AR'
-                        )}
+                        {(() => {
+                          const obraSeleccionada =
+                            obras.find(
+                              (obra) =>
+                                obra.id ===
+                                Number(targetId)
+                            )
+                          const esOsde =
+                            obraSeleccionada?.nombre
+                              ?.toUpperCase()
+                              .includes('OSDE')
+                          
+                          let total = 0
+                          if (targetKind === 'obra' && esOsde) {
+                            // Para OSDE, usar importe manual
+                            total = Number(
+                              amount.replace(
+                                ',',
+                                '.'
+                              ) || 0
+                            )
+                          } else {
+                            // Para pacientes y otras obras, calcular
+                            const cantidad = Number(cantidadSesiones.replace(',', '.') || 1)
+                            const precio = Number(precioSesion.replace(',', '.') || 0)
+                            total = cantidad * precio
+                          }
+                          
+                          return total.toLocaleString(
+                            'es-AR'
+                          )
+                        })()}
                       </span>
                     </div>
                   </div>

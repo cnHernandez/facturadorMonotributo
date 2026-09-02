@@ -18,7 +18,10 @@ namespace Back.Utils
                 {
                     var json = System.Text.Json.JsonSerializer.Serialize(badRequest.Value);
                     var jsonNode = JsonNode.Parse(json);
-                    details = jsonNode?["Errors"]?.ToString() ?? "No determinado";
+                    details = jsonNode?["errors"]?.ToJsonString()
+                        ?? jsonNode?["Errors"]?.ToJsonString()
+                        ?? badRequest.Value?.ToString()
+                        ?? "No determinado";
                 }
                 catch
                 {

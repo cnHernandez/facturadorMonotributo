@@ -33,7 +33,7 @@ type Obra = {
   nombre: string
   domicilioComercial: string
   condicion: 'Contado' | 'CuentaCorriente'
-  mail: string
+  mail: string | null
   condicionIVA: CondicionObraSocialIVA
   estado: boolean
 }
@@ -99,6 +99,63 @@ function ultimoDiaMesAnterior() {
   return `${year}-${month}-${day}`
 }
 
+function isOsdeObra(obra?: Obra | null) {
+  return (
+    obra?.nombre
+      ?.toUpperCase()
+      .includes('OSDE') ?? false
+  )
+}
+
+function normalizeOptionalText(
+  value: string | null | undefined
+) {
+  const normalized = value?.trim() ?? ''
+
+  return normalized ? normalized : null
+}
+
+function buildDefaultInvoiceDescription({
+  paciente,
+  fechaDesde,
+  esObraSocial,
+}: {
+  paciente: Paciente | null
+  fechaDesde: string
+  esObraSocial: boolean
+}) {
+  const fechaBase = fechaDesde
+    ? new Date(`${fechaDesde}T00:00:00`)
+    : new Date()
+
+  const fechaValida = Number.isNaN(
+    fechaBase.getTime()
+  )
+    ? new Date()
+    : fechaBase
+
+  const mesAnio = fechaValida
+    .toLocaleDateString('es-AR', {
+      month: 'long',
+      year: 'numeric',
+    })
+    .toUpperCase()
+
+  const descripcionBase =
+    'HONORARIOS PROFESIONALES POR SESIONES DE PSICOPEDAGOGIA CORRESPONDIENTE AL MES ' +
+    mesAnio
+
+  const afiliado = paciente?.numAfiliado
+    ? ` AF: ${paciente.numAfiliado}`
+    : ''
+
+  if (esObraSocial && paciente) {
+    return `${descripcionBase} PACIENTE: ${paciente.nombre} ${paciente.apellido}${afiliado}`
+  }
+
+  return `${descripcionBase}${afiliado}`
+}
+
 function App() {
   const maxFechaFacturacion = ultimoDiaMesAnterior()
   const [view, setView] = useState<View>('pacientes')
@@ -152,6 +209,9 @@ function App() {
   const [fechaVencimiento, setFechaVencimiento] =
     useState('')
 
+  const [invoiceDescription, setInvoiceDescription] =
+    useState('')
+
   useEffect(() => {
     Promise.all([
       api('/api/pacientes', 'GET'),
@@ -176,6 +236,8 @@ const loadedObras =
           )
         } else if (loadedObras.length > 0) {
           const firstObra = loadedObras[0]
+          const firstObraEsOsde =
+            isOsdeObra(firstObra)
 
           setTargetKind('obra')
           setTargetId(
@@ -190,7 +252,8 @@ const loadedObras =
             )
 
           setInvoicePatientId(
-            firstPatients.length > 0
+            !firstObraEsOsde &&
+              firstPatients.length > 0
               ? String(firstPatients[0].id)
               : ''
           )
@@ -304,18 +367,24 @@ const loadedObras =
     event.preventDefault()
 
     try {
-     
+      const obraPayload = {
+        ...obra,
+        mail: normalizeOptionalText(
+          obra.mail
+        ),
+      }
+
       const data = await api(
         obraId
           ? `/api/obras-sociales/${obraId}`
           : '/api/obras-sociales',
         obraId ? 'PUT' : 'POST',
-        obra
+        obraPayload
       )
 
       const savedObra =
         (data ?? {
-          ...obra,
+          ...obraPayload,
           id: obraId ?? Date.now(),
         }) as Obra
 
@@ -415,8 +484,12 @@ const loadedObras =
                   remaining[0].id
               )
 
+            const remainingEsOsde =
+              isOsdeObra(remaining[0])
+
             setInvoicePatientId(
-              associatedPatients.length > 0
+              !remainingEsOsde &&
+                associatedPatients.length > 0
                 ? String(
                     associatedPatients[0].id
                   )
@@ -450,27 +523,37 @@ const loadedObras =
         )
       : []
 
+  const selectedObra =
+    targetKind === 'obra'
+      ? obras.find(
+          (obra) =>
+            obra.id === Number(targetId)
+        ) ?? null
+      : null
+
+  const esOsde = isOsdeObra(selectedObra)
+
+  const selectedPatient =
+    targetKind === 'paciente'
+      ? pacientes.find(
+          (x) =>
+            x.id === Number(targetId)
+        ) ?? null
+      : pacientes.find(
+          (x) =>
+            x.id ===
+            Number(invoicePatientId)
+        ) ?? null
+
+  const suggestedInvoiceDescription =
+    buildDefaultInvoiceDescription({
+      paciente: selectedPatient,
+      fechaDesde,
+      esObraSocial:
+        targetKind === 'obra',
+    })
+
   const downloadPdf = async () => {
-    const selectedPatient =
-      targetKind === 'paciente'
-        ? pacientes.find(
-            (x) =>
-              x.id === Number(targetId)
-          )
-        : pacientes.find(
-            (x) =>
-              x.id ===
-              Number(invoicePatientId)
-          )
-
-    const selectedObra =
-      targetKind === 'obra'
-        ? obras.find(
-            (x) =>
-              x.id === Number(targetId)
-          )
-        : null
-
     if (
       targetKind === 'paciente' &&
       !selectedPatient
@@ -483,19 +566,14 @@ const loadedObras =
 
     if (
       targetKind === 'obra' &&
-      (!selectedObra || !selectedPatient)
+      (!selectedObra ||
+        (!esOsde && !selectedPatient))
     ) {
       setMessage(
         'Seleccioná la obra social y el paciente'
       )
       return
     }
-
-    // Detectar si es OSDE
-    const esOsde =
-      selectedObra?.nombre
-        ?.toUpperCase()
-        .includes('OSDE') || false
 
     // Validar fechas
     
@@ -643,6 +721,12 @@ if (!fechaVencimiento) {
               selectedPatient
                 ? selectedPatient.numAfiliado
                 : null,
+
+            descripcionServicio:
+              normalizeOptionalText(
+                invoiceDescription
+              ) ??
+              suggestedInvoiceDescription,
           }),
         }
       )
@@ -884,6 +968,9 @@ if (!fechaVencimiento) {
                         setInvoicePatientId(
                           ''
                         )
+                        setInvoiceDescription(
+                          ''
+                        )
                       }}
                       className={`tab ${
                         targetKind ===
@@ -911,9 +998,15 @@ if (!fechaVencimiento) {
                           setInvoicePatientId(
                             ''
                           )
+                          setInvoiceDescription(
+                            ''
+                          )
 
                           return
                         }
+
+                        const firstObraEsOsde =
+                          isOsdeObra(firstObra)
 
                         setTargetId(
                           String(
@@ -929,6 +1022,7 @@ if (!fechaVencimiento) {
                           )
 
                         setInvoicePatientId(
+                          !firstObraEsOsde &&
                           associatedPatients.length >
                           0
                             ? String(
@@ -936,6 +1030,9 @@ if (!fechaVencimiento) {
                                   .id
                               )
                             : ''
+                        )
+                        setInvoiceDescription(
+                          ''
                         )
                       }}
                       className={`tab ${
@@ -1085,6 +1182,10 @@ if (!fechaVencimiento) {
                                 obraId
                               )
 
+                              setInvoiceDescription(
+                                ''
+                              )
+
                               const patients =
                                 pacientes.filter(
                                   (paciente) =>
@@ -1094,7 +1195,22 @@ if (!fechaVencimiento) {
                                     )
                                 )
 
+                              const obraSeleccionada =
+                                obras.find(
+                                  (obra) =>
+                                    obra.id ===
+                                    Number(
+                                      obraId
+                                    )
+                                )
+
+                              const obraEsOsde =
+                                isOsdeObra(
+                                  obraSeleccionada
+                                )
+
                               setInvoicePatientId(
+                                !obraEsOsde &&
                                 patients.length >
                                 0
                                   ? String(
@@ -1133,7 +1249,13 @@ if (!fechaVencimiento) {
 
                         
 
-                        <Field label="Paciente">
+                        <Field
+                          label={
+                            esOsde
+                              ? 'Paciente (opcional para OSDE)'
+                              : 'Paciente'
+                          }
+                        >
                           <select
                             value={
                               invoicePatientId
@@ -1147,10 +1269,17 @@ if (!fechaVencimiento) {
                               )
                             }
                             disabled={
+                              !esOsde &&
                               invoicePatients.length ===
-                              0
+                                0
                             }
                           >
+                            {esOsde && (
+                              <option value="">
+                                Facturación global OSDE
+                              </option>
+                            )}
+
                             {invoicePatients.length ===
                             0 ? (
                               <option value="">
@@ -1186,21 +1315,22 @@ if (!fechaVencimiento) {
                           </select>
                         </Field>
                       </div>
+<div className={esOsde ? 'w-full md:w-[100%]' : 'w-full'}>
+  <Field label="Producto / servicio">
+    <textarea
+      value={invoiceDescription}
+      onChange={(event) =>
+        setInvoiceDescription(event.target.value)
+      }
+      rows={3}
+      className="w-full"
+      placeholder={suggestedInvoiceDescription}
+    />
+  </Field>
+</div>
 
                       {/* Si es OSDE, mostrar importe manual */}
-                      {(() => {
-                        const obraSeleccionada =
-                          obras.find(
-                            (obra) =>
-                              obra.id ===
-                              Number(targetId)
-                          )
-                        const esOsde =
-                          obraSeleccionada?.nombre
-                            ?.toUpperCase()
-                            .includes('OSDE')
-                        
-                        return esOsde ? (
+                      {esOsde ? (
                           <div className="grid gap-5 md:grid-cols-2">
                             <Field label="Importe total">
                               <input
@@ -1245,8 +1375,7 @@ if (!fechaVencimiento) {
                               </Field>
                             </div>
                           </>
-                        )
-                      })()}
+                        )}
 
                       <div className="grid gap-5 md:grid-cols-3">
                        <Field label="Período desde">
@@ -1295,7 +1424,10 @@ if (!fechaVencimiento) {
                         </b>
 
                         <p className="mt-1 text-sm text-emerald-900/65">
-                          HONORARIOS PROFESIONALES POR SESIONES DE PSICOPEDAGOGIA
+                          {normalizeOptionalText(
+                            invoiceDescription
+                          ) ??
+                            suggestedInvoiceDescription}
                         </p>
 
                         {targetKind ===
@@ -1339,20 +1471,12 @@ if (!fechaVencimiento) {
                       <span className="text-2xl font-bold text-emerald-950">
                         $
                         {(() => {
-                          const obraSeleccionada =
-                            obras.find(
-                              (obra) =>
-                                obra.id ===
-                                Number(targetId)
-                            )
-                          const esOsde =
-                            obraSeleccionada?.nombre
-                              ?.toUpperCase()
-                              .includes('OSDE')
-                          
                           let total = 0
-                          if (targetKind === 'obra' && esOsde) {
-                            // Para OSDE, usar importe manual
+
+                          if (
+                            targetKind === 'obra' &&
+                            esOsde
+                          ) {
                             total = Number(
                               amount.replace(
                                 ',',
@@ -1360,12 +1484,16 @@ if (!fechaVencimiento) {
                               ) || 0
                             )
                           } else {
-                            // Para pacientes y otras obras, calcular
-                            const cantidad = Number(cantidadSesiones.replace(',', '.') || 1)
-                            const precio = Number(precioSesion.replace(',', '.') || 0)
+                            const cantidad = Number(
+                              cantidadSesiones.replace(',', '.') || 1
+                            )
+                            const precio = Number(
+                              precioSesion.replace(',', '.') || 0
+                            )
+
                             total = cantidad * precio
                           }
-                          
+
                           return total.toLocaleString(
                             'es-AR'
                           )

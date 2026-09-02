@@ -33,6 +33,9 @@ namespace Back.DTOs
         [StringLength(20)]
         public string? PacienteNumAfiliado { get; set; }
 
+        [StringLength(500)]
+        public string? DescripcionServicio { get; set; }
+
         // Campos nuevos para facturación por sesiones
         [Range(1, int.MaxValue)]
         public int? CantidadSesiones { get; set; }
@@ -64,6 +67,7 @@ namespace Back.DTOs
             }
 
             if (TipoDocumentoReceptor == 80 &&
+                !EsFacturacionManual &&
                 string.IsNullOrWhiteSpace(PacienteNombre))
             {
                 yield return new ValidationResult(

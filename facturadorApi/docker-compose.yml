@@ -11,6 +11,7 @@ services:
       - TZ=America/Argentina/Buenos_Aires
     volumes:
       - ./logs:/app/logs
+      - ./.runtime:/app/.runtime
     depends_on:
       - database
 

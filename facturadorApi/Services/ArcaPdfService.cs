@@ -596,6 +596,7 @@ private static void BodyCell(
 
     var descripcion =
         ObtenerDescripcionServicio(
+            solicitud.DescripcionServicio,
             solicitud.PacienteNombre,
             solicitud.PacienteDni,
             solicitud.PacienteNumAfiliado,
@@ -684,12 +685,18 @@ private static void BodyCell(
         }
 
         private string ObtenerDescripcionServicio(
+            string? descripcionManual,
             string? pacienteNombre,
             string? pacienteDni,
             string? pacienteNumAfiliado,
             DateOnly fechaFacturacion,
             int tipoDocumento)
         {
+            if (!string.IsNullOrWhiteSpace(descripcionManual))
+            {
+                return descripcionManual.Trim();
+            }
+
             var mesAnio = fechaFacturacion.ToString("MMMM yyyy", new CultureInfo("es-AR")).ToUpper();
 
             var descripcionBase =

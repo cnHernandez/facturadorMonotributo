@@ -1,5 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using System.Globalization;
+using Back.Extensions;
 
 namespace Back.DTOs
 {
@@ -14,33 +15,38 @@ namespace Back.DTOs
         [Range(0, long.MaxValue)]
         public long NumeroDocumentoReceptor { get; set; }
 
-        [StringLength(150)]
+        [LettersOnly(ErrorMessage = "El nombre del receptor solo puede contener letras, espacios y guiones.")]
+        [StringLength(150, ErrorMessage = "El nombre del receptor no debe exceder 150 caracteres.")]
         public string? NombreReceptor { get; set; }
 
-        [StringLength(200)]
+        [StringLength(200, ErrorMessage = "El domicilio no debe exceder 200 caracteres.")]
         public string? DomicilioReceptor { get; set; }
 
+        [Range(0.01, double.MaxValue, ErrorMessage = "El importe total debe ser mayor a 0.")]
         public decimal ImporteTotal { get; set; }
 
         public DateOnly? FechaComprobante { get; set; }
 
-        [StringLength(150)]
+        [LettersOnly(ErrorMessage = "El nombre del paciente solo puede contener letras, espacios y guiones.")]
+        [StringLength(150, ErrorMessage = "El nombre del paciente no debe exceder 150 caracteres.")]
         public string? PacienteNombre { get; set; }
 
-        [StringLength(20)]
+        [Dni(ErrorMessage = "El DNI del paciente debe contener exactamente 8 dígitos.")]
+        [StringLength(20, ErrorMessage = "El DNI no debe exceder 20 caracteres.")]
         public string? PacienteDni { get; set; }
 
-        [StringLength(20)]
+        [NumAfiliado(ErrorMessage = "El número de afiliado contiene caracteres inválidos.")]
+        [StringLength(20, ErrorMessage = "El número de afiliado no debe exceder 20 caracteres.")]
         public string? PacienteNumAfiliado { get; set; }
 
-        [StringLength(500)]
+        [StringLength(500, ErrorMessage = "La descripción del servicio no debe exceder 500 caracteres.")]
         public string? DescripcionServicio { get; set; }
 
         // Campos nuevos para facturación por sesiones
-        [Range(1, int.MaxValue)]
+        [Range(1, int.MaxValue, ErrorMessage = "La cantidad de sesiones debe ser mayor a 0.")]
         public int? CantidadSesiones { get; set; }
 
-        [Range(0.01, double.MaxValue)]
+        [Range(0.01, double.MaxValue, ErrorMessage = "El precio por sesión debe ser mayor a 0.")]
         public decimal? PrecioSesion { get; set; }
 
         public DateOnly? FechaDesde { get; set; }

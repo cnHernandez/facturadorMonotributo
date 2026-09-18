@@ -8,7 +8,20 @@ import {
   Trash2,
   Users,
   X,
+  AlertCircle,
+  CheckCircle2,
 } from 'lucide-react'
+import {
+  validateDni,
+  validateCuit,
+  validateName,
+  validateNumAfiliado,
+  validateDomicilio,
+  validateEmail,
+  hasErrors,
+  type PacienteErrors,
+  type ObraErrors,
+} from './validations'
 
 type Paciente = {
   id: number
@@ -1590,16 +1603,34 @@ const Title = ({
 const Field = ({
   label,
   children,
+  error,
+  isValid,
 }: {
   label: string
   children: React.ReactNode
+  error?: string | null
+  isValid?: boolean
 }) => (
   <label className="block text-sm font-medium text-slate-700">
-    <span className="mb-1.5 block">
-      {label}
-    </span>
+    <div className="mb-1.5 flex items-center justify-between">
+      <span>{label}</span>
+      {isValid === true && (
+        <span className="flex items-center gap-1 text-xs text-green-600">
+          <CheckCircle2 size={14} />
+          Válido
+        </span>
+      )}
+    </div>
 
-    {children}
+    <div className="relative">
+      {children}
+      {error && (
+        <div className="mt-1.5 flex gap-1.5 rounded-md bg-red-50 p-2 text-xs text-red-700">
+          <AlertCircle size={14} className="mt-0.5 shrink-0" />
+          <span>{error}</span>
+        </div>
+      )}
+    </div>
   </label>
 )
 
@@ -1846,78 +1877,162 @@ function PatientForm({
   ) => Promise<void>
   editing: boolean
 }) {
+  const [errors, setErrors] = useState<PacienteErrors>({})
+
+  const handleFieldChange = (field: string, value: string) => {
+    setData({
+      ...data,
+      [field]: value,
+    })
+
+    // Validar campo individual
+    let fieldError: string | null = null
+    switch (field) {
+      case 'dni':
+        fieldError = validateDni(value)
+        break
+      case 'nombre':
+        fieldError = validateName(value, 'El nombre')
+        break
+      case 'apellido':
+        fieldError = validateName(value, 'El apellido')
+        break
+      case 'numAfiliado':
+        fieldError = validateNumAfiliado(value)
+        break
+      case 'domicilio':
+        fieldError = validateDomicilio(value)
+        break
+    }
+
+    setErrors((prev) => ({
+      ...prev,
+      [field as keyof PacienteErrors]: fieldError,
+    }))
+  }
+
+  const isFormValid =
+    !hasErrors(errors) &&
+    data.dni &&
+    data.nombre &&
+    data.apellido &&
+    data.numAfiliado &&
+    data.domicilio
+
+  const isFieldValid = (field: keyof PacienteErrors): boolean => {
+    return !errors[field] && !!data[field]
+  }
+
   return (
     <form
       onSubmit={save}
       className="space-y-4"
     >
       <div className="grid grid-cols-2 gap-3">
-        <Field label="Nombre">
+        <Field
+          label="Nombre"
+          error={errors.nombre}
+          isValid={isFieldValid('nombre')}
+        >
           <input
             required
             value={data.nombre}
             onChange={(event) =>
-              setData({
-                ...data,
-                nombre:
-                  event.target.value,
-              })
+              handleFieldChange(
+                'nombre',
+                event.target.value
+              )
+            }
+            className={
+              errors.nombre ? 'border-red-300' : ''
             }
           />
         </Field>
 
-        <Field label="Apellido">
+        <Field
+          label="Apellido"
+          error={errors.apellido}
+          isValid={isFieldValid('apellido')}
+        >
           <input
             required
             value={data.apellido}
             onChange={(event) =>
-              setData({
-                ...data,
-                apellido:
-                  event.target.value,
-              })
+              handleFieldChange(
+                'apellido',
+                event.target.value
+              )
+            }
+            className={
+              errors.apellido
+                ? 'border-red-300'
+                : ''
             }
           />
         </Field>
       </div>
 
-      <Field label="DNI">
+      <Field
+        label="DNI"
+        error={errors.dni}
+        isValid={isFieldValid('dni')}
+      >
         <input
           required
           value={data.dni}
           onChange={(event) =>
-            setData({
-              ...data,
-              dni: event.target.value,
-            })
+            handleFieldChange(
+              'dni',
+              event.target.value
+            )
+          }
+          placeholder="12345678"
+          className={
+            errors.dni ? 'border-red-300' : ''
           }
         />
       </Field>
 
-      <Field label="Nº afiliado">
+      <Field
+        label="Nº afiliado"
+        error={errors.numAfiliado}
+        isValid={isFieldValid('numAfiliado')}
+      >
         <input
           required
           value={data.numAfiliado}
           onChange={(event) =>
-            setData({
-              ...data,
-              numAfiliado:
-                event.target.value,
-            })
+            handleFieldChange(
+              'numAfiliado',
+              event.target.value
+            )
+          }
+          className={
+            errors.numAfiliado
+              ? 'border-red-300'
+              : ''
           }
         />
       </Field>
 
-      <Field label="Domicilio">
+      <Field
+        label="Domicilio"
+        error={errors.domicilio}
+        isValid={isFieldValid('domicilio')}
+      >
         <input
           required
           value={data.domicilio}
           onChange={(event) =>
-            setData({
-              ...data,
-              domicilio:
-                event.target.value,
-            })
+            handleFieldChange(
+              'domicilio',
+              event.target.value
+            )
+          }
+          className={
+            errors.domicilio
+              ? 'border-red-300'
+              : ''
           }
         />
       </Field>
@@ -1955,18 +2070,19 @@ function PatientForm({
       </Field>
 
       <Field label="Observaciones">
-  <textarea
-    value={data.observaciones ?? ''}
-    onChange={(event) =>
-      setData({
-        ...data,
-        observaciones: event.target.value,
-      })
-    }
-    rows={4}
-    placeholder="Observaciones del paciente..."
-  />
-</Field>
+        <textarea
+          value={data.observaciones ?? ''}
+          onChange={(event) =>
+            setData({
+              ...data,
+              observaciones:
+                event.target.value,
+            })
+          }
+          rows={4}
+          placeholder="Observaciones del paciente..."
+        />
+      </Field>
 
       <label className="flex gap-2 text-sm">
         <input
@@ -1986,7 +2102,8 @@ function PatientForm({
 
       <button
         type="submit"
-        className="command w-full justify-center"
+        disabled={!isFormValid}
+        className="command w-full justify-center disabled:opacity-50 disabled:cursor-not-allowed"
       >
         {editing
           ? 'Guardar cambios'
@@ -2011,91 +2128,174 @@ function ObraForm({
   ) => Promise<void>
   editing: boolean
 }) {
+  const [errors, setErrors] = useState<ObraErrors>({})
+
+  const handleFieldChange = (field: string, value: string) => {
+    setData({
+      ...data,
+      [field]: value,
+    } as Omit<Obra, 'id'>)
+
+    // Validar campo individual
+    let fieldError: string | null = null
+    switch (field) {
+      case 'cuit':
+        fieldError = validateCuit(value)
+        break
+      case 'nombre':
+        fieldError = validateName(value, 'El nombre')
+        break
+      case 'domicilioComercial':
+        fieldError = validateDomicilio(value)
+        break
+      case 'mail':
+        fieldError = validateEmail(value)
+        break
+    }
+
+    setErrors((prev) => ({
+      ...prev,
+      [field as keyof ObraErrors]: fieldError,
+    }))
+  }
+
+  const isFormValid =
+    !hasErrors(errors) &&
+    data.cuit &&
+    data.nombre &&
+    data.domicilioComercial
+
+  const isFieldValid = (field: keyof ObraErrors): boolean => {
+    return !errors[field] && !!data[field as keyof typeof data]
+  }
+
   return (
     <form
       onSubmit={save}
       className="space-y-4"
     >
-      <Field label="Nombre">
+      <Field
+        label="Nombre"
+        error={errors.nombre}
+        isValid={isFieldValid('nombre')}
+      >
         <input
           required
           value={data.nombre}
           onChange={(event) =>
-            setData({
-              ...data,
-              nombre:
-                event.target.value,
-            })
+            handleFieldChange(
+              'nombre',
+              event.target.value
+            )
+          }
+          className={
+            errors.nombre
+              ? 'border-red-300'
+              : ''
           }
         />
       </Field>
 
-      <Field label="CUIT">
+      <Field
+        label="CUIT"
+        error={errors.cuit}
+        isValid={isFieldValid('cuit')}
+      >
         <input
           required
           value={data.cuit}
           onChange={(event) =>
-            setData({
-              ...data,
-              cuit:
-                event.target.value,
-            })
+            handleFieldChange(
+              'cuit',
+              event.target.value
+            )
+          }
+          placeholder="12345678901"
+          className={
+            errors.cuit
+              ? 'border-red-300'
+              : ''
           }
         />
       </Field>
 
-      <Field label="Domicilio comercial">
+      <Field
+        label="Domicilio comercial"
+        error={errors.domicilioComercial}
+        isValid={isFieldValid(
+          'domicilioComercial'
+        )}
+      >
         <input
           required
           value={
             data.domicilioComercial
           }
           onChange={(event) =>
-            setData({
-              ...data,
-              domicilioComercial:
-                event.target.value,
-            })
+            handleFieldChange(
+              'domicilioComercial',
+              event.target.value
+            )
+          }
+          className={
+            errors.domicilioComercial
+              ? 'border-red-300'
+              : ''
           }
         />
       </Field>
-     <Field label="Mail">
-  <input
-    type="email"
-    value={data.mail ?? ''}
-    onChange={(event) =>
-      setData({
-        ...data,
-        mail: event.target.value,
-      })
-    }
-  />
-</Field>
 
-<Field label="Condición frente al IVA">
-  <select
-    value={data.condicionIVA}
-    onChange={(event) =>
-      setData({
-        ...data,
-        condicionIVA:
-          event.target.value as CondicionObraSocialIVA,
-      })
-    }
-  >
-    <option value="IVA_Sujeto_Exento">
-      IVA Sujeto Exento
-    </option>
+      <Field
+        label="Mail"
+        error={errors.mail}
+        isValid={
+          !errors.mail &&
+          !!data.mail
+        }
+      >
+        <input
+          type="email"
+          value={data.mail ?? ''}
+          onChange={(event) =>
+            handleFieldChange(
+              'mail',
+              event.target.value
+            )
+          }
+          placeholder="contacto@ejemplo.com"
+          className={
+            errors.mail
+              ? 'border-red-300'
+              : ''
+          }
+        />
+      </Field>
 
-    <option value="ResponsableInscripto">
-      Responsable Inscripto
-    </option>
+      <Field label="Condición frente al IVA">
+        <select
+          value={data.condicionIVA}
+          onChange={(event) =>
+            setData({
+              ...data,
+              condicionIVA:
+                event.target
+                  .value as CondicionObraSocialIVA,
+            })
+          }
+        >
+          <option value="IVA_Sujeto_Exento">
+            IVA Sujeto Exento
+          </option>
 
-    <option value="Consumidor_Final">
-      Consumidor Final
-    </option>
-  </select>
-</Field>
+          <option value="ResponsableInscripto">
+            Responsable Inscripto
+          </option>
+
+          <option value="Consumidor_Final">
+            Consumidor Final
+          </option>
+        </select>
+      </Field>
 
       <Field label="Condición">
         <select
@@ -2104,7 +2304,8 @@ function ObraForm({
             setData({
               ...data,
               condicion:
-                event.target.value as Obra['condicion'],
+                event.target
+                  .value as Obra['condicion'],
             })
           }
         >
@@ -2136,7 +2337,8 @@ function ObraForm({
 
       <button
         type="submit"
-        className="command w-full justify-center"
+        disabled={!isFormValid}
+        className="command w-full justify-center disabled:opacity-50 disabled:cursor-not-allowed"
       >
         {editing
           ? 'Guardar cambios'

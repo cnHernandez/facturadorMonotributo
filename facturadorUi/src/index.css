@@ -51,6 +51,19 @@ input[type="checkbox"] {
   accent-color: #16745c;
 }
 
+/* Inputs con errores */
+input.border-red-300,
+select.border-red-300 {
+  border-color: #fca5a5 !important;
+  background-color: #fef2f2;
+}
+
+input.border-red-300:focus,
+select.border-red-300:focus {
+  border-color: #dc2626 !important;
+  outline-color: #fecaca !important;
+}
+
 /* Paneles */
 
 .panel {

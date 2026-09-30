@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useMemo } from 'react'
 import {
   Building2,
   HeartPulse,
@@ -99,15 +99,9 @@ async function api(
 function ultimoDiaMesAnterior() {
   const hoy = new Date()
 
-  const fecha = new Date(
-    hoy.getFullYear(),
-    hoy.getMonth(),
-    0
-  )
-
-  const year = fecha.getFullYear()
-  const month = String(fecha.getMonth() + 1).padStart(2, '0')
-  const day = String(fecha.getDate()).padStart(2, '0')
+  const year = hoy.getFullYear()
+  const month = String(hoy.getMonth() + 1).padStart(2, '0')
+  const day = String(hoy.getDate()).padStart(2, '0')
 
   return `${year}-${month}-${day}`
 }
@@ -170,7 +164,10 @@ function buildDefaultInvoiceDescription({
 }
 
 function App() {
-  const maxFechaFacturacion = ultimoDiaMesAnterior()
+  const maxFechaFacturacion = useMemo(
+    () => ultimoDiaMesAnterior(),
+    [] // No dependencies - recalcula en cada render
+  )
   const [view, setView] = useState<View>('pacientes')
   const [message, setMessage] = useState('Cargando datos...')
 
@@ -219,7 +216,13 @@ function App() {
   const [fechaHasta, setFechaHasta] =
     useState('')
 
+  const [fechaHastaError, setFechaHastaError] =
+    useState('')
+
   const [fechaVencimiento, setFechaVencimiento] =
+    useState('')
+
+  const [fechaVencimientoError, setFechaVencimientoError] =
     useState('')
 
   const [invoiceDescription, setInvoiceDescription] =
@@ -597,12 +600,19 @@ if (!fechaDesde || !fechaHasta) {
   return
 }
 
+if (fechaHastaError) {
+  setMessage(
+    'Corregí el error en las fechas: ' + fechaHastaError
+  )
+  return
+}
+
 if (
   fechaDesde > maxFechaFacturacion ||
   fechaHasta > maxFechaFacturacion
 ) {
   setMessage(
-    'El período facturado debe ser anterior al mes actual'
+    'El período facturado no puede ser en el futuro'
   )
   return
 }
@@ -617,6 +627,13 @@ if (fechaDesde > fechaHasta) {
 if (!fechaVencimiento) {
   setMessage(
     'Ingresá la fecha de vencimiento'
+  )
+  return
+}
+
+if (fechaVencimientoError) {
+  setMessage(
+    'Corregí el error en la fecha de vencimiento: ' + fechaVencimientoError
   )
   return
 }
@@ -1143,9 +1160,17 @@ if (!fechaVencimiento) {
     type="date"
     max={maxFechaFacturacion}
     value={fechaDesde}
-    onChange={(event) =>
+    onChange={(event) => {
       setFechaDesde(event.target.value)
-    }
+      // Validar que fechaHasta no sea menor que la nueva fechaDesde
+      if (fechaHasta && event.target.value > fechaHasta) {
+        setFechaHastaError(
+          'La fecha hasta no puede ser menor a la fecha desde'
+        )
+      } else {
+        setFechaHastaError('')
+      }
+    }}
   />
 </Field>
 
@@ -1154,22 +1179,56 @@ if (!fechaVencimiento) {
     type="date"
     max={maxFechaFacturacion}
     value={fechaHasta}
-    onChange={(event) =>
-      setFechaHasta(event.target.value)
-    }
+    onChange={(event) => {
+      const nuevaFechaHasta = event.target.value
+      setFechaHasta(nuevaFechaHasta)
+      // Validar que no sea menor que fechaDesde
+      if (fechaDesde && nuevaFechaHasta < fechaDesde) {
+        setFechaHastaError(
+          'La fecha hasta no puede ser menor a la fecha desde'
+        )
+      } else {
+        setFechaHastaError('')
+      }
+      // Validar que no sea mayor que fechaVencimiento
+      if (fechaVencimiento && nuevaFechaHasta > fechaVencimiento) {
+        setFechaVencimientoError(
+          'La fecha de vencimiento no puede ser menor a la fecha hasta'
+        )
+      } else if (fechaVencimiento && nuevaFechaHasta <= fechaVencimiento) {
+        setFechaVencimientoError('')
+      }
+    }}
   />
+  {fechaHastaError && (
+    <p className="mt-1 text-sm text-red-500 font-semibold">
+      ⚠️ {fechaHastaError}
+    </p>
+  )}
 </Field>
 
                         <Field label="Fecha de Vto.">
                           <input
                             type="date"
                             value={fechaVencimiento}
-                            onChange={(event) =>
-                              setFechaVencimiento(
-                                event.target.value
-                              )
-                            }
+                            onChange={(event) => {
+                              const nuevaFechaVencimiento = event.target.value
+                              setFechaVencimiento(nuevaFechaVencimiento)
+                              // Validar que no sea menor a fechaHasta
+                              if (fechaHasta && nuevaFechaVencimiento < fechaHasta) {
+                                setFechaVencimientoError(
+                                  'La fecha de vencimiento no puede ser menor a la fecha hasta'
+                                )
+                              } else {
+                                setFechaVencimientoError('')
+                              }
+                            }}
                           />
+                          {fechaVencimientoError && (
+                            <p className="mt-1 text-sm text-red-500 font-semibold">
+                              ⚠️ {fechaVencimientoError}
+                            </p>
+                          )}
                         </Field>
                       </div>
                     </div>
@@ -1396,9 +1455,17 @@ if (!fechaVencimiento) {
     type="date"
     max={maxFechaFacturacion}
     value={fechaDesde}
-    onChange={(event) =>
+    onChange={(event) => {
       setFechaDesde(event.target.value)
-    }
+      // Validar que fechaHasta no sea menor que la nueva fechaDesde
+      if (fechaHasta && event.target.value > fechaHasta) {
+        setFechaHastaError(
+          'La fecha hasta no puede ser menor a la fecha desde'
+        )
+      } else {
+        setFechaHastaError('')
+      }
+    }}
   />
 </Field>
 
@@ -1407,22 +1474,56 @@ if (!fechaVencimiento) {
     type="date"
     max={maxFechaFacturacion}
     value={fechaHasta}
-    onChange={(event) =>
-      setFechaHasta(event.target.value)
-    }
+    onChange={(event) => {
+      const nuevaFechaHasta = event.target.value
+      setFechaHasta(nuevaFechaHasta)
+      // Validar que no sea menor que fechaDesde
+      if (fechaDesde && nuevaFechaHasta < fechaDesde) {
+        setFechaHastaError(
+          'La fecha hasta no puede ser menor a la fecha desde'
+        )
+      } else {
+        setFechaHastaError('')
+      }
+      // Validar que no sea mayor que fechaVencimiento
+      if (fechaVencimiento && nuevaFechaHasta > fechaVencimiento) {
+        setFechaVencimientoError(
+          'La fecha de vencimiento no puede ser menor a la fecha hasta'
+        )
+      } else if (fechaVencimiento && nuevaFechaHasta <= fechaVencimiento) {
+        setFechaVencimientoError('')
+      }
+    }}
   />
+  {fechaHastaError && (
+    <p className="mt-1 text-sm text-red-500 font-semibold">
+      ⚠️ {fechaHastaError}
+    </p>
+  )}
 </Field>
 
                         <Field label="Fecha de Vto.">
                           <input
                             type="date"
                             value={fechaVencimiento}
-                            onChange={(event) =>
-                              setFechaVencimiento(
-                                event.target.value
-                              )
-                            }
+                            onChange={(event) => {
+                              const nuevaFechaVencimiento = event.target.value
+                              setFechaVencimiento(nuevaFechaVencimiento)
+                              // Validar que no sea menor a fechaHasta
+                              if (fechaHasta && nuevaFechaVencimiento < fechaHasta) {
+                                setFechaVencimientoError(
+                                  'La fecha de vencimiento no puede ser menor a la fecha hasta'
+                                )
+                              } else {
+                                setFechaVencimientoError('')
+                              }
+                            }}
                           />
+                          {fechaVencimientoError && (
+                            <p className="mt-1 text-sm text-red-500 font-semibold">
+                              ⚠️ {fechaVencimientoError}
+                            </p>
+                          )}
                         </Field>
                       </div>
                     </div>

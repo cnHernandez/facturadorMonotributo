@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Security.Cryptography;
 using System.Security.Cryptography.Pkcs;
 using System.Security.Cryptography.X509Certificates;
 using System.Text;
@@ -6,7 +7,9 @@ using System.Text.Json;
 using System.Xml.Linq;
 using Back.Conf;
 using Back.DTOs;
+using Back.Utils;
 using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
 namespace Back.Services
@@ -17,16 +20,19 @@ namespace Back.Services
         private readonly IHttpClientFactory _httpClientFactory;
         private readonly IMemoryCache _cache;
         private readonly ArcaOptions _options;
+        private readonly ILogger<ArcaAuthenticationService> _logger;
         private readonly SemaphoreSlim _ticketLock = new(1, 1);
 
         public ArcaAuthenticationService(
             IHttpClientFactory httpClientFactory,
             IMemoryCache cache,
-            IOptions<ArcaOptions> options)
+            IOptions<ArcaOptions> options,
+            ILogger<ArcaAuthenticationService> logger)
         {
             _httpClientFactory = httpClientFactory;
             _cache = cache;
             _options = options.Value;
+            _logger = logger;
         }
 
         public async Task<ArcaAuthenticationResponseDTO> AuthenticateAsync(CancellationToken cancellationToken = default)
@@ -42,10 +48,13 @@ namespace Back.Services
         public async Task<ArcaAuthenticationTicket> GetTicketAsync(CancellationToken cancellationToken = default)
         {
             ValidateOptions();
-            var cacheKey = CacheKeyPrefix + _options.Service;
+            var cacheKey = BuildCacheKey();
+            
             if (_cache.TryGetValue(cacheKey, out ArcaAuthenticationTicket? cached) &&
                 cached!.ExpirationTimeUtc > DateTime.UtcNow.AddMinutes(5))
             {
+                _logger.LogInformation("Ticket ARCA obtenido desde cache (Ambiente: {Environment}, CUIT: {Cuit}, Service: {Service})", 
+                    _options.Environment ?? "Default", _options.CuitEmisor, _options.Service);
                 return cached;
             }
 
@@ -61,13 +70,18 @@ namespace Back.Services
                 var persisted = LoadPersistedTicket();
                 if (persisted != null && persisted.ExpirationTimeUtc > DateTime.UtcNow.AddMinutes(5))
                 {
+                    _logger.LogInformation("Ticket ARCA obtenido desde persistencia (Ambiente: {Environment}, CUIT: {Cuit})", 
+                        _options.Environment ?? "Default", _options.CuitEmisor);
                     _cache.Set(cacheKey, persisted, persisted.ExpirationTimeUtc.AddMinutes(-5));
                     return persisted;
                 }
 
+                _logger.LogInformation("Solicitando nuevo Ticket ARCA a WSAA (Ambiente: {Environment}, URL: {WsaaUrl}, CUIT: {Cuit})", 
+                    _options.Environment ?? "Default", _options.WsaaUrl, _options.CuitEmisor);
+
                 var loginTicketRequest = CreateLoginTicketRequest();
                 var cms = Sign(loginTicketRequest);
-            var soapRequest = $"""
+                var soapRequest = $"""
 <?xml version="1.0" encoding="utf-8"?>
 <soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
   <soap:Body>
@@ -78,30 +92,56 @@ namespace Back.Services
 </soap:Envelope>
 """;
 
-            using var request = new HttpRequestMessage(HttpMethod.Post, _options.WsaaUrl)
-            {
-                Content = new StringContent(soapRequest, Encoding.UTF8, "text/xml")
-            };
-            request.Headers.Add("SOAPAction", string.Empty);
+                using var request = new HttpRequestMessage(HttpMethod.Post, _options.WsaaUrl)
+                {
+                    Content = new StringContent(soapRequest, Encoding.UTF8, "text/xml")
+                };
+                request.Headers.Add("SOAPAction", string.Empty);
 
-            using var response = await _httpClientFactory.CreateClient("ArcaWsaa")
-                .SendAsync(request, cancellationToken);
-            var responseXml = await response.Content.ReadAsStringAsync(cancellationToken);
-            if (!response.IsSuccessStatusCode)
-            {
-                throw new InvalidOperationException($"WSAA rechazó la autenticación ({(int)response.StatusCode}): {GetSoapFaultMessage(responseXml)}");
-            }
+                using var response = await _httpClientFactory.CreateClient("ArcaWsaa")
+                    .SendAsync(request, cancellationToken);
+                var responseXml = await response.Content.ReadAsStringAsync(cancellationToken);
+                if (!response.IsSuccessStatusCode)
+                {
+                    var faultMessage = GetSoapFaultMessage(responseXml);
+                    _logger.LogError("WSAA rechazó la autenticación ({StatusCode}): {FaultMessage}", 
+                        (int)response.StatusCode, faultMessage);
+                    throw new InvalidOperationException($"WSAA rechazó la autenticación ({(int)response.StatusCode}): {faultMessage}");
+                }
 
-            response.EnsureSuccessStatusCode();
+                response.EnsureSuccessStatusCode();
 
-            var result = ParseResponse(responseXml);
-            _cache.Set(cacheKey, result, result.ExpirationTimeUtc.AddMinutes(-5));
+                var result = ParseResponse(responseXml);
+                _cache.Set(cacheKey, result, result.ExpirationTimeUtc.AddMinutes(-5));
                 SaveTicket(result);
-            return result;
+                
+                _logger.LogInformation("Ticket ARCA obtenido exitosamente de WSAA (Vencimiento: {Expiration})", 
+                    result.ExpirationTimeUtc);
+                return result;
             }
             finally
             {
                 _ticketLock.Release();
+            }
+        }
+
+        private string BuildCacheKey()
+        {
+            // Obtener thumbprint del certificado como identificador único
+            var thumbprint = GetCertificateThumbprint();
+            return $"{CacheKeyPrefix}{_options.Environment ?? "default"}-{_options.CuitEmisor}-{_options.Service}-{thumbprint}";
+        }
+
+        private string GetCertificateThumbprint()
+        {
+            try
+            {
+                using var cert = X509Certificate2.CreateFromPemFile(_options.CertificatePath, _options.PrivateKeyPath);
+                return cert.Thumbprint ?? "unknown";
+            }
+            catch
+            {
+                return "unknown";
             }
         }
 
@@ -187,22 +227,31 @@ namespace Back.Services
                 var encryptedTicket = File.ReadAllText(_options.TicketCachePath);
                 return JsonSerializer.Deserialize<ArcaAuthenticationTicket>(EncryptionHelper.Decrypt(encryptedTicket));
             }
-            catch (Exception)
+            catch (Exception ex)
             {
+                _logger.LogWarning(ex, "Error cargando ticket persistente desde {TicketCachePath}", _options.TicketCachePath);
                 return null;
             }
         }
 
         private void SaveTicket(ArcaAuthenticationTicket ticket)
         {
-            var directory = Path.GetDirectoryName(_options.TicketCachePath);
-            if (!string.IsNullOrWhiteSpace(directory))
+            try
             {
-                Directory.CreateDirectory(directory);
-            }
+                var directory = Path.GetDirectoryName(_options.TicketCachePath);
+                if (!string.IsNullOrWhiteSpace(directory))
+                {
+                    Directory.CreateDirectory(directory);
+                }
 
-            var encryptedTicket = EncryptionHelper.Encrypt(JsonSerializer.Serialize(ticket));
-            File.WriteAllText(_options.TicketCachePath, encryptedTicket);
+                var encryptedTicket = EncryptionHelper.Encrypt(JsonSerializer.Serialize(ticket));
+                File.WriteAllText(_options.TicketCachePath, encryptedTicket);
+                _logger.LogDebug("Ticket guardado en cache persistente en {TicketCachePath}", _options.TicketCachePath);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Error guardando ticket en cache persistente");
+            }
         }
 
         private void ValidateOptions()
@@ -211,6 +260,55 @@ namespace Back.Services
                 !File.Exists(_options.CertificatePath) || !File.Exists(_options.PrivateKeyPath))
             {
                 throw new InvalidOperationException("La configuración ARCA o los archivos de certificado no son válidos.");
+            }
+
+            // Validaciones cruzadas de ambiente
+            bool isProduction = _options.Environment?.Equals("Production", StringComparison.OrdinalIgnoreCase) ?? false;
+            bool isDevelopment = _options.Environment?.Equals("Development", StringComparison.OrdinalIgnoreCase) ?? true;
+
+            if (isProduction)
+            {
+                // En producción, rechazar URLs de homologación
+                if (_options.WsaaUrl.Contains("wsaahomo", StringComparison.OrdinalIgnoreCase) ||
+                    _options.WsfeUrl.Contains("wswhomo", StringComparison.OrdinalIgnoreCase))
+                {
+                    throw new InvalidOperationException(
+                        $"CONFIGURACIÓN INVÁLIDA: Ambiente=Production pero se detectaron URLs de HOMOLOGACIÓN. " +
+                        $"WSAA URL: {_options.WsaaUrl}, WSFE URL: {_options.WsfeUrl}");
+                }
+
+                // En producción, PuntoDeVenta debe ser 4
+                if (_options.PuntoDeVenta != 4)
+                {
+                    throw new InvalidOperationException(
+                        $"CONFIGURACIÓN INVÁLIDA: Ambiente=Production pero PuntoDeVenta={_options.PuntoDeVenta} (debe ser 4)");
+                }
+
+                // En producción, verificar que el certificado NO sea el de homologación
+                if (_options.CertificatePath.Contains("psicopedagoga", StringComparison.OrdinalIgnoreCase))
+                {
+                    throw new InvalidOperationException(
+                        $"CONFIGURACIÓN INVÁLIDA: Ambiente=Production pero se detectó certificado de HOMOLOGACIÓN: {_options.CertificatePath}");
+                }
+
+                _logger.LogInformation(
+                    "✓ PRODUCCIÓN CONFIGURADA CORRECTAMENTE: WSAA={WsaaUrl}, WSFE={WsfeUrl}, CUIT={Cuit}, PuntoDeVenta={PuntoDeVenta}, Certificado={CertPath}",
+                    _options.WsaaUrl, _options.WsfeUrl, _options.CuitEmisor, _options.PuntoDeVenta, _options.CertificatePath);
+            }
+            else if (isDevelopment)
+            {
+                // En desarrollo, advertencia si se detectan URLs de producción
+                if (_options.WsaaUrl.Contains("wsaa.afip.gov.ar", StringComparison.OrdinalIgnoreCase) ||
+                    _options.WsfeUrl.Contains("servicios1.afip.gov.ar", StringComparison.OrdinalIgnoreCase))
+                {
+                    _logger.LogWarning(
+                        "⚠ ADVERTENCIA: Ambiente=Development pero se detectaron URLs de PRODUCCIÓN. WSAA URL: {WsaaUrl}, WSFE URL: {WsfeUrl}",
+                        _options.WsaaUrl, _options.WsfeUrl);
+                }
+
+                _logger.LogInformation(
+                    "✓ DESARROLLO CONFIGURADO: WSAA={WsaaUrl}, WSFE={WsfeUrl}, CUIT={Cuit}, PuntoDeVenta={PuntoDeVenta}, Certificado={CertPath}",
+                    _options.WsaaUrl, _options.WsfeUrl, _options.CuitEmisor, _options.PuntoDeVenta, _options.CertificatePath);
             }
         }
     }

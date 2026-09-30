@@ -6,5 +6,6 @@ namespace Back.Services
     {
         Task<ArcaUltimoComprobanteResponseDTO> GetUltimoComprobanteAsync(int tipoComprobante, CancellationToken cancellationToken = default);
         Task<ArcaCaeResponseDTO> SolicitarCaeAsync(ArcaSolicitudCaeDTO solicitud, CancellationToken cancellationToken = default);
+        Task<ArcaTestConexionResponseDTO> TestConexionAsync(CancellationToken cancellationToken = default);
     }
 }

@@ -8,7 +8,9 @@ export default defineConfig({
   server: {
     proxy: {
       '/api': {
-        target: 'http://127.0.0.1:8080',
+        // Allow API URL to be configurable via environment variable
+        // Default to localhost for development, can be overridden with VITE_API_URL
+        target: process.env.VITE_API_URL || 'http://127.0.0.1:8081',
         changeOrigin: true,
         headers: {
           'X-API-KEY': 'tuclaveenbase64'

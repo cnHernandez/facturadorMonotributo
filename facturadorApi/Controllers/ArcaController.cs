@@ -54,5 +54,9 @@ namespace Back.Controllers
 
             return result;
         }
+
+        [HttpPost("test-conexion")]
+        public async Task<ActionResult<ArcaTestConexionResponseDTO>> TestConexion(CancellationToken cancellationToken)
+            => Ok(await _wsfeService.TestConexionAsync(cancellationToken));
     }
 }

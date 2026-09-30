@@ -4,6 +4,7 @@ namespace Back.Conf
     {
         public const string SectionName = "Arca";
 
+        public string? Environment { get; set; }
         public string WsaaUrl { get; set; } = null!;
         public string WsfeUrl { get; set; } = null!;
         public string Service { get; set; } = "wsfe";

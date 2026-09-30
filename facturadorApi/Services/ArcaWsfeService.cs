@@ -85,6 +85,135 @@ namespace Back.Services
             return ParseCaeResponse(responseXml, solicitud.TipoComprobante, numeroComprobante);
         }
 
+        public async Task<ArcaTestConexionResponseDTO> TestConexionAsync(CancellationToken cancellationToken = default)
+        {
+            var response = new ArcaTestConexionResponseDTO
+            {
+                Ambiente = _options.Environment ?? "Default",
+                CuitEmisor = _options.CuitEmisor,
+                PuntoDeVenta = _options.PuntoDeVenta,
+                WsaaUrl = _options.WsaaUrl,
+                WsfeUrl = _options.WsfeUrl,
+                FechaValidacion = DateTime.UtcNow,
+                CertificadoThumbprint = GetCertificateThumbprint()
+            };
+
+            // Test WSAA
+            try
+            {
+                var ticket = await _authenticationService.GetTicketAsync(cancellationToken);
+                response.WsaaConexion = true;
+                response.MensajeWsaa = "✓ Conexión exitosa con WSAA";
+            }
+            catch (Exception ex)
+            {
+                response.WsaaConexion = false;
+                response.MensajeWsaa = $"✗ Error en WSAA: {ex.Message}";
+            }
+
+            // Test WSFE (FEDummy + FECompUltimoAutorizado)
+            if (response.WsaaConexion)
+            {
+                try
+                {
+                    // FEDummy: diagnostico de servidores AFIP
+                    response.FEDummy = await FEDummyAsync(cancellationToken);
+                    
+                    // FECompUltimoAutorizado: estado de numeración (tipo 11 = Factura C)
+                    var ultimoComprobante = await GetUltimoComprobanteAsync(11, cancellationToken);
+                    response.UltimoComprobante = new DTOs.FECompUltimoAutorizadoInfo
+                    {
+                        PuntoVenta = ultimoComprobante.PuntoDeVenta,
+                        CbteTipo = ultimoComprobante.TipoComprobante,
+                        UltimoAutorizado = (int)ultimoComprobante.UltimoNumeroAutorizado,
+                        ProximoNumero = (int)ultimoComprobante.UltimoNumeroAutorizado + 1
+                    };
+                    
+                    response.WsfeConexion = true;
+                    response.MensajeWsfe = "✓ Conexión exitosa con WSFE";
+                }
+                catch (Exception ex)
+                {
+                    response.WsfeConexion = false;
+                    response.MensajeWsfe = $"✗ Error en WSFE: {ex.Message}";
+                }
+            }
+            else
+            {
+                response.WsfeConexion = false;
+                response.MensajeWsfe = "⊘ No se probó (falló WSAA)";
+            }
+
+            return response;
+        }
+
+        public async Task<DTOs.FEDummyResponse> FEDummyAsync(CancellationToken cancellationToken = default)
+        {
+            var ticket = await _authenticationService.GetTicketAsync(cancellationToken);
+            var soapRequest = CreateFEDummySoapRequest(ticket);
+            
+            using var request = new HttpRequestMessage(HttpMethod.Post, _options.WsfeUrl)
+            {
+                Content = new StringContent(soapRequest, System.Text.Encoding.UTF8, "text/xml")
+            };
+            request.Headers.Add("SOAPAction", $"{WsfeNamespace}FEDummy");
+
+            using var response = await _httpClientFactory.CreateClient("ArcaWsaa").SendAsync(request, cancellationToken);
+            var responseXml = await response.Content.ReadAsStringAsync(cancellationToken);
+            
+            if (!response.IsSuccessStatusCode)
+            {
+                throw new InvalidOperationException($"WSFE rechazó FEDummy ({(int)response.StatusCode}): {GetSoapError(responseXml)}");
+            }
+
+            return ParseFEDummyResponse(responseXml);
+        }
+
+        private string CreateFEDummySoapRequest(ArcaAuthenticationTicket ticket)
+        {
+            XNamespace soap = "http://schemas.xmlsoap.org/soap/envelope/";
+            XNamespace wsfe = WsfeNamespace;
+            return new XDocument(
+                new XElement(soap + "Envelope",
+                    new XElement(soap + "Body",
+                        new XElement(wsfe + "FEDummy",
+                            new XElement(wsfe + "Auth",
+                                new XElement(wsfe + "Token", ticket.Token),
+                                new XElement(wsfe + "Sign", ticket.Sign),
+                                new XElement(wsfe + "Cuit", _options.CuitEmisor))))))
+                .ToString(SaveOptions.DisableFormatting);
+        }
+
+        private DTOs.FEDummyResponse ParseFEDummyResponse(string soapResponse)
+        {
+            var soap = XDocument.Parse(soapResponse);
+            
+            var appServer = soap.Descendants().FirstOrDefault(x => x.Name.LocalName == "AppServer")?.Value ?? "UNKNOWN";
+            var dbServer = soap.Descendants().FirstOrDefault(x => x.Name.LocalName == "DbServer")?.Value ?? "UNKNOWN";
+            var authServer = soap.Descendants().FirstOrDefault(x => x.Name.LocalName == "AuthServer")?.Value ?? "UNKNOWN";
+            
+            return new DTOs.FEDummyResponse
+            {
+                AppServer = appServer,
+                DbServer = dbServer,
+                AuthServer = authServer
+            };
+        }
+
+        private string GetCertificateThumbprint()
+        {
+            try
+            {
+                using var cert = System.Security.Cryptography.X509Certificates.X509Certificate2.CreateFromPemFile(
+                    _options.CertificatePath, _options.PrivateKeyPath);
+                return cert.Thumbprint ?? "unknown";
+            }
+            catch
+            {
+                return "unknown";
+            }
+        }
+
         private string CreateSoapRequest(ArcaAuthenticationTicket ticket, int tipoComprobante)
         {
             XNamespace soap = "http://schemas.xmlsoap.org/soap/envelope/";

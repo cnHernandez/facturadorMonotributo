@@ -102,6 +102,39 @@ try
 
     builder.Services.AddAuthorization();
 
+    // ===== VALIDACIÓN DE SEGURIDAD: Production NO puede usar base de Development =====
+    var connectionString = builder.Configuration.GetConnectionString("DefaultConnection") 
+        ?? throw new InvalidOperationException("No se encontró la cadena de conexión 'DefaultConnection'");
+
+    if (builder.Environment.IsProduction())
+    {
+        // Verificar que Production NO use base de datos de Development
+        var dbNameLower = connectionString.ToLowerInvariant();
+        if (dbNameLower.Contains("database=facturadordb") ||
+            dbNameLower.Contains("database=dev") ||
+            dbNameLower.Contains("database=test") ||
+            dbNameLower.Contains("database=homolog") ||
+            dbNameLower.Contains("facturadordb"))
+        {
+            throw new InvalidOperationException(
+                "❌ CRÍTICO: Production está usando una base de datos de Development/Test/Homologación. " +
+                "SEGURIDAD: Connection string DEBE contener 'facturador_prod' exclusivamente. " +
+                $"Detectada: {connectionString}");
+        }
+
+        if (!dbNameLower.Contains("facturador_prod"))
+        {
+            throw new InvalidOperationException(
+                "❌ CRÍTICO: Production DEBE usar la base de datos 'facturador_prod'. " +
+                $"Connection string detectada no contiene 'facturador_prod': {connectionString}");
+        }
+
+        Log.Information("✓ Validación de Seguridad OK - Production usando base: facturador_prod");
+    }
+    // ===== FIN VALIDACIÓN DE SEGURIDAD =====
+
+    builder.Services.AddAuthorization();
+
     builder.Services.AddControllers(options =>
     {
         options.Filters.Add(new NotFoundResultFilter());
@@ -176,8 +209,58 @@ try
 
     var app = builder.Build();
 
-    // Middleware de Excepciones 500
-    app.UseMiddleware<ExceptionMiddleware>();
+    // ===== PRODUCTION STARTUP VALIDATION =====
+    if (app.Environment.IsProduction())
+    {
+        using (var scope = app.Services.CreateScope())
+        {
+            var arcaOptions = scope.ServiceProvider.GetRequiredService<IOptions<ArcaOptions>>().Value;
+            
+            // Validate ARCA certificates exist at startup
+            Log.Information("🔍 Validating ARCA certificate configuration...");
+            
+            if (string.IsNullOrWhiteSpace(arcaOptions.CertificatePath))
+            {
+                throw new InvalidOperationException(
+                    "❌ CRÍTICO: Arca:CertificatePath no está configurado. " +
+                    "Configure la variable de entorno Arca__CertificatePath");
+            }
+            
+            if (string.IsNullOrWhiteSpace(arcaOptions.PrivateKeyPath))
+            {
+                throw new InvalidOperationException(
+                    "❌ CRÍTICO: Arca:PrivateKeyPath no está configurado. " +
+                    "Configure la variable de entorno Arca__PrivateKeyPath");
+            }
+            
+            if (!File.Exists(arcaOptions.CertificatePath))
+            {
+                throw new InvalidOperationException(
+                    $"❌ CRÍTICO: No se encontró el certificado ARCA en: {arcaOptions.CertificatePath}\n" +
+                    $"Asegúrese de que el archivo esté montado como volumen read-only en /run/secrets/arca/\n" +
+                    $"Opciones:\n" +
+                    $"  1. Local: Montar desde host usando Docker volume bind mount\n" +
+                    $"  2. AWS EC2: Usar AWS Secrets Manager o Parameter Store\n" +
+                    $"  3. Verificar permisos: chmod 400 en el archivo");
+            }
+            
+            if (!File.Exists(arcaOptions.PrivateKeyPath))
+            {
+                throw new InvalidOperationException(
+                    $"❌ CRÍTICO: No se encontró la clave privada ARCA en: {arcaOptions.PrivateKeyPath}\n" +
+                    $"Asegúrese de que el archivo esté montado como volumen read-only en /run/secrets/arca/\n" +
+                    $"Opciones:\n" +
+                    $"  1. Local: Montar desde host usando Docker volume bind mount\n" +
+                    $"  2. AWS EC2: Usar AWS Secrets Manager o Parameter Store\n" +
+                    $"  3. Verificar permisos: chmod 400 en el archivo");
+            }
+            
+            Log.Information("✓ ARCA certificates validated successfully");
+            Log.Information($"✓ Certificate: {arcaOptions.CertificatePath}");
+            Log.Information($"✓ Private Key: {arcaOptions.PrivateKeyPath}");
+        }
+    }
+    // ===== END STARTUP VALIDATION =====
 
     using (var scope = app.Services.CreateScope())
     {
@@ -199,8 +282,24 @@ try
     app.UseMiddleware<AuthenticationMiddleware>();
 
     app.UseAuthorization();
+    
+    // Health check endpoint (sin autenticación - para Docker, ALB, monitoring)
+    app.MapHealthChecks("/health");
+    
     app.MapControllers();
-    app.Run();
+
+    // Auto-apply migrations in Production on startup
+    if (app.Environment.IsProduction())
+    {
+        using (var scope = app.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            await db.Database.MigrateAsync();
+            Log.Information("✓ Migraciones aplicadas exitosamente en Production");
+        }
+    }
+
+    await app.RunAsync();
 }
 catch (Exception ex)
 {

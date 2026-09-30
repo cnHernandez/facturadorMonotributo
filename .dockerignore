@@ -1,0 +1,50 @@
+# Version control
+.git/
+.gitignore
+.github/
+
+# Environment and secrets (NEVER include in image)
+.env*
+.env.local
+.env.production
+.env.production.local
+*.key
+*.crt
+*.pem
+*.p12
+*.pfx
+
+# Build artifacts
+facturadorApi/bin/
+facturadorApi/obj/
+facturadorApi/logs/
+facturadorApi/.runtime/
+facturadorApi/.git/
+facturadorApi/Data/mysql/
+
+# Frontend
+facturadorUi/
+node_modules/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Documentation
+*.md
+README*
+
+# Data
+data/
+logs/
+.runtime/
+
+# Node
+node_modules/
+npm-debug.log
+pnpm-lock.yaml
+yarn.lock

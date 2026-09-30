@@ -7,7 +7,6 @@ services:
       - "8080:80"
     restart: always
     environment:
-      - ASPNETCORE_ENVIRONMENT=Production
       - TZ=America/Argentina/Buenos_Aires
     volumes:
       - ./logs:/app/logs

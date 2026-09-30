@@ -1,0 +1,109 @@
+services:
+  facturador-net:
+    build:
+      context: ..
+      dockerfile: facturadorApi/Dockerfile
+
+    restart: unless-stopped
+
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ASPNETCORE_URLS: http://+:8080
+      TZ: ${TZ:-America/Argentina/Buenos_Aires}
+
+      ConnectionStrings__DefaultConnection: "Server=database-prod;Port=3306;Database=${MYSQL_PROD_DATABASE:-facturador_prod};User=${MYSQL_PROD_USER:-facturador_prod_user};Password=${MYSQL_PROD_PASSWORD};Ssl Mode=None"
+
+      Jwt__SecretKey: ${JWT_SECRET_KEY}
+
+      Encryption__Key: ${ENCRYPTION_KEY}
+      Encryption__IV: ${ENCRYPTION_IV}
+
+      ApiSettings__ApiKey: ${API_KEY}
+
+      Arca__Environment: Production
+      Arca__CuitEmisor: ${ARCA_CUIT}
+      Arca__PuntoDeVenta: ${ARCA_PUNTO_VENTA:-4}
+      Arca__WsaaUrl: ${ARCA_WSAA_URL:-https://wsaa.afip.gov.ar/ws/services/LoginCms}
+      Arca__WsfeUrl: ${ARCA_WSFE_URL:-https://servicios1.afip.gov.ar/wsfev1/service.asmx}
+      Arca__Service: wsfe
+      Arca__CertificatePath: ${ARCA_CERT_PATH:-/run/secrets/arca/facturador-produccion_290c16f6d34b67bd.crt}
+      Arca__PrivateKeyPath: ${ARCA_PRIVATE_KEY_PATH:-/run/secrets/arca/facturador-produccion.key}
+      Arca__TicketCachePath: .runtime/arca-ticket-wsfe-produccion.dat
+
+    ports:
+      - "8081:8080"
+
+    volumes:
+      - ./logs:/app/logs
+      - ./.runtime:/app/.runtime
+
+      - ../facturador-produccion_290c16f6d34b67bd.crt:/run/secrets/arca/facturador-produccion_290c16f6d34b67bd.crt:ro
+      - ../facturador-produccion.key:/run/secrets/arca/facturador-produccion.key:ro
+
+    networks:
+      - facturador-prod-network
+
+    depends_on:
+      database-prod:
+        condition: service_healthy
+
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  database-prod:
+    image: mysql:8.4
+
+    container_name: facturador-mysql-prod
+
+    restart: unless-stopped
+
+    environment:
+      MYSQL_DATABASE: ${MYSQL_PROD_DATABASE:-facturador_prod}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_PROD_ROOT_PASSWORD}
+      MYSQL_USER: ${MYSQL_PROD_USER:-facturador_prod_user}
+      MYSQL_PASSWORD: ${MYSQL_PROD_PASSWORD}
+      TZ: ${TZ:-America/Argentina/Buenos_Aires}
+
+    # Solo habilitar para debugging local si necesitás entrar
+    # desde Windows directamente a MySQL:
+    #
+    # ports:
+    #   - "3308:3306"
+
+    volumes:
+      - facturador_mysql_prod_data:/var/lib/mysql
+      - ./init-production.sql:/docker-entrypoint-initdb.d/01-create-user.sql:ro
+
+    networks:
+      - facturador-prod-network
+
+    healthcheck:
+      test:
+        - "CMD"
+        - "mysqladmin"
+        - "ping"
+        - "-h"
+        - "localhost"
+        - "-u${MYSQL_PROD_USER:-facturador_prod_user}"
+        - "-p${MYSQL_PROD_PASSWORD}"
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  facturador_mysql_prod_data:
+    driver: local
+
+networks:
+  facturador-prod-network:
+    driver: bridge

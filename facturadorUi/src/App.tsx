@@ -235,6 +235,42 @@ function buildDefaultInvoiceDescription({
   return `${descripcionBase}${afiliado}`
 }
 
+function buildFinalInvoiceDescription({
+  descripcion,
+  paciente,
+}: {
+  descripcion: string
+  paciente: Paciente | null
+}) {
+  const descripcionBase =
+    normalizeOptionalText(descripcion)
+
+  if (!paciente) {
+    return descripcionBase
+  }
+
+  const dni = paciente.dni
+    ? ` DNI: ${paciente.dni.replace(/^(\d{2})(\d{3})(\d{3})$/, '$1.$2.$3')}`
+    : ''
+
+  const afiliado = paciente.numAfiliado
+    ? ` AF: ${paciente.numAfiliado}`
+    : ''
+
+  const datosPaciente =
+    ` PACIENTE: ${paciente.nombre} ${paciente.apellido}${dni}${afiliado}`
+
+  if (!descripcionBase) {
+    return datosPaciente.trim()
+  }
+
+  if (/\bPACIENTE\s*:/.test(descripcionBase)) {
+    return descripcionBase
+  }
+
+  return `${descripcionBase}${datosPaciente}`
+}
+
 function App() {
   const maxFechaFacturacion = useMemo(
     () => ultimoDiaMesAnterior(),
@@ -350,10 +386,14 @@ const loadedObras =
         setPacientes(loadedPatients)
         setObras(loadedObras)
 
-        if (loadedPatients.length > 0) {
+        const loadedParticulares = loadedPatients.filter(
+          (paciente) => paciente.obraSocialId == null
+        )
+
+        if (loadedParticulares.length > 0) {
           setTargetKind('paciente')
           setTargetId(
-            String(loadedPatients[0].id)
+            String(loadedParticulares[0].id)
           )
         } else if (loadedObras.length > 0) {
           const firstObra = loadedObras[0]
@@ -756,6 +796,10 @@ const loadedObras =
     }
   }
 
+  const particulares = pacientes.filter(
+    (paciente) => paciente.obraSocialId == null
+  )
+
   const invoicePatients =
     targetKind === 'obra'
       ? pacientes.filter(
@@ -763,7 +807,7 @@ const loadedObras =
             paciente.obraSocialId ===
             Number(targetId)
         )
-      : []
+      : particulares
 
   const selectedObra =
     targetKind === 'obra'
@@ -777,9 +821,9 @@ const loadedObras =
 
   const selectedPatient =
     targetKind === 'paciente'
-      ? pacientes.find(
-          (x) =>
-            x.id === Number(targetId)
+      ? particulares.find(
+          (paciente) =>
+            paciente.id === Number(targetId)
         ) ?? null
       : pacientes.find(
           (x) =>
@@ -797,12 +841,22 @@ const loadedObras =
       ? selectedObra?.condicionIVA
       : invoiceToResponsible
         ? selectedPatient?.responsableCondicionIVA
-        : null
+        : selectedPatient?.obraSocialId != null
+          ? selectedPatient?.responsableCondicionIVA
+          : null
 
   const suggestedInvoiceDescription =
     buildDefaultInvoiceDescription({
       paciente: selectedPatient,
       fechaDesde,
+    })
+
+  const finalInvoiceDescription =
+    buildFinalInvoiceDescription({
+      descripcion:
+        normalizeOptionalText(invoiceDescription) ??
+        suggestedInvoiceDescription,
+      paciente: selectedPatient,
     })
 
   const downloadPdf = async () => {
@@ -1076,10 +1130,7 @@ if (fechaVencimientoError) {
                 : null,
 
             descripcionServicio:
-              normalizeOptionalText(
-                invoiceDescription
-              ) ??
-              suggestedInvoiceDescription,
+              finalInvoiceDescription,
           }),
         }
       )
@@ -1426,7 +1477,7 @@ if (fechaVencimientoError) {
 
                         setTargetId(
                           String(
-                            pacientes[0]?.id ??
+                            particulares[0]?.id ??
                               ''
                           )
                         )
@@ -1519,20 +1570,24 @@ if (fechaVencimientoError) {
                       <div className="grid gap-5 md:grid-cols-2">
                         <Field label="Paciente">
                           <select
-                            value={targetId}
+                            value={
+                              invoicePatients.some((p) => p.id === Number(targetId))
+                                ? targetId
+                                : ''
+                            }
                             onChange={(event) => {
                               setTargetId(
                                 event.target.value
                               )
                             }}
                           >
-                            {pacientes.length ===
+                            {invoicePatients.length ===
                             0 ? (
                               <option value="">
-                                No hay pacientes
+                                No hay pacientes particulares
                               </option>
                             ) : (
-                              pacientes.map(
+                              invoicePatients.map(
                                 (paciente) => (
                                   <option
                                     key={
@@ -1996,10 +2051,7 @@ if (fechaVencimientoError) {
                         </b>
 
                         <p className="mt-1 text-sm text-emerald-900/65">
-                          {normalizeOptionalText(
-                            invoiceDescription
-                          ) ??
-                            suggestedInvoiceDescription}
+                          {finalInvoiceDescription}
                         </p>
 
                         <p className="mt-2 text-sm font-medium text-emerald-900">
@@ -2007,42 +2059,23 @@ if (fechaVencimientoError) {
                           {nombreCondicionIVA(condicionIVAReceptor)}
                         </p>
 
-                        {targetKind ===
-                          'obra' &&
-                          invoicePatientId && (
-                            <p className="mt-2 text-sm font-medium text-emerald-900">
-                              {(() => {
-                                const patient =
-                                  invoicePatients.find(
-                                    (item) =>
-                                      item.id ===
-                                      Number(
-                                        invoicePatientId
-                                      )
-                                  )
+                        {targetKind === 'paciente' && (
+                          <p className="mt-2 text-sm font-medium text-emerald-900">
+                            Paciente:{' '}
+                            {selectedPatient && targetId
+                              ? `${selectedPatient.apellido} ${selectedPatient.nombre} — DNI ${selectedPatient.dni}`
+                              : 'Sin cargar'}
+                          </p>
+                        )}
 
-                                if (!patient) {
-                                  return null
-                                }
-
-                                return (
-                                  <>
-                                    Paciente:{' '}
-                                    {
-                                      patient.apellido
-                                    }{' '}
-                                    {
-                                      patient.nombre
-                                    }{' '}
-                                    — DNI{' '}
-                                    {
-                                      patient.dni
-                                    }
-                                  </>
-                                )
-                              })()}
-                            </p>
-                          )}
+                        {targetKind === 'obra' && (
+                          <p className="mt-2 text-sm font-medium text-emerald-900">
+                            Paciente:{' '}
+                            {selectedPatient && invoicePatientId
+                              ? `${selectedPatient.apellido} ${selectedPatient.nombre} — DNI ${selectedPatient.dni}`
+                              : 'Sin cargar'}
+                          </p>
+                        )}
                       </div>
 
                       <span className="text-2xl font-bold text-emerald-950">
@@ -2925,8 +2958,7 @@ function ObraForm({
     data.cuit &&
     data.nombre &&
     data.domicilioComercial &&
-    data.condicionIVA &&
-    data.condicionIVAConfirmada
+    data.condicionIVA
 
   const isFieldValid = (field: keyof ObraErrors): boolean => {
     return !errors[field] && !!data[field as keyof typeof data]
@@ -3043,7 +3075,7 @@ function ObraForm({
               ...data,
               condicionIVA:
                 (event.target.value as CondicionIVA) || null,
-              condicionIVAConfirmada: false,
+              condicionIVAConfirmada: true,
             })
           }
         >
@@ -3055,20 +3087,6 @@ function ObraForm({
           ))}
         </select>
       </Field>
-
-      <label className="flex items-start gap-2 text-sm text-slate-700">
-        <input
-          type="checkbox"
-          checked={data.condicionIVAConfirmada}
-          onChange={(event) =>
-            setData({
-              ...data,
-              condicionIVAConfirmada: event.target.checked,
-            })
-          }
-        />
-        Confirmo que esta condición frente al IVA corresponde a la obra social.
-      </label>
 
       <Field label="Condición">
         <select

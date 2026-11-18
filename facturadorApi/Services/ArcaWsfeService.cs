@@ -1,6 +1,7 @@
 using System.Xml.Linq;
 using Back.Conf;
 using Back.DTOs;
+using Back.Models;
 using Microsoft.Extensions.Options;
 
 namespace Back.Services
@@ -61,6 +62,20 @@ namespace Back.Services
             if (solicitud.ImporteTotal <= 0 || _options.CuitEmisor <= 0 || _options.PuntoDeVenta <= 0)
             {
                 throw new InvalidOperationException("La configuración de emisor, punto de venta o importe no es válida.");
+            }
+
+            if (!solicitud.CondicionIVAReceptor.HasValue ||
+                !Enum.IsDefined(solicitud.CondicionIVAReceptor.Value))
+            {
+                throw new InvalidOperationException(
+                    "La condición frente al IVA del receptor es obligatoria y debe ser válida.");
+            }
+
+            if (!solicitud.CondicionVenta.HasValue ||
+                !Enum.IsDefined(solicitud.CondicionVenta.Value))
+            {
+                throw new InvalidOperationException(
+                    "La condición de venta es obligatoria y debe ser válida.");
             }
 
             var ultimoComprobante = await GetUltimoComprobanteAsync(solicitud.TipoComprobante, cancellationToken);
@@ -239,6 +254,9 @@ namespace Back.Services
         {
             XNamespace soap = "http://schemas.xmlsoap.org/soap/envelope/";
             XNamespace wsfe = WsfeNamespace;
+            var condicionIVAReceptor = solicitud.CondicionIVAReceptor
+                ?? throw new InvalidOperationException(
+                    "La condición frente al IVA del receptor es obligatoria.");
             return new XDocument(
                 new XElement(soap + "Envelope",
                     new XElement(soap + "Body",
@@ -268,7 +286,9 @@ namespace Back.Services
                                         new XElement(wsfe + "ImpIVA", 0),
                                         new XElement(wsfe + "MonId", "PES"),
                                         new XElement(wsfe + "MonCotiz", 1),
-                                        new XElement(wsfe + "CondicionIVAReceptorId", 5))))))))
+                                        new XElement(
+                                            wsfe + "CondicionIVAReceptorId",
+                                            condicionIVAReceptor.ToArcaId()))))))))
                 .ToString(SaveOptions.DisableFormatting);
         }
 

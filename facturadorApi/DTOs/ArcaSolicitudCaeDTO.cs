@@ -1,6 +1,7 @@
 using System.ComponentModel.DataAnnotations;
 using System.Globalization;
 using Back.Extensions;
+using Back.Models;
 
 namespace Back.DTOs
 {
@@ -21,6 +22,14 @@ namespace Back.DTOs
 
         [StringLength(200, ErrorMessage = "El domicilio no debe exceder 200 caracteres.")]
         public string? DomicilioReceptor { get; set; }
+
+        [Required(ErrorMessage = "La condición frente al IVA del receptor es requerida.")]
+        [EnumDataType(typeof(CondicionIVA), ErrorMessage = "La condición frente al IVA del receptor no es válida.")]
+        public CondicionIVA? CondicionIVAReceptor { get; set; }
+
+        [Required(ErrorMessage = "La condición de venta es requerida.")]
+        [EnumDataType(typeof(CondicionObraSocial), ErrorMessage = "La condición de venta no es válida.")]
+        public CondicionObraSocial? CondicionVenta { get; set; }
 
         [Range(0.01, double.MaxValue, ErrorMessage = "El importe total debe ser mayor a 0.")]
         public decimal ImporteTotal { get; set; }
@@ -63,6 +72,24 @@ namespace Back.DTOs
         public IEnumerable<ValidationResult> Validate(
             ValidationContext validationContext)
         {
+            if (!CondicionIVAReceptor.HasValue ||
+                !Enum.IsDefined(CondicionIVAReceptor.Value))
+            {
+                yield return new ValidationResult(
+                    "Debe indicar una condición frente al IVA válida para el receptor.",
+                    new[] { nameof(CondicionIVAReceptor) }
+                );
+            }
+
+            if (!CondicionVenta.HasValue ||
+                !Enum.IsDefined(CondicionVenta.Value))
+            {
+                yield return new ValidationResult(
+                    "Debe indicar una condición de venta válida.",
+                    new[] { nameof(CondicionVenta) }
+                );
+            }
+
             if (TipoDocumentoReceptor == 99 &&
                 NumeroDocumentoReceptor != 0)
             {

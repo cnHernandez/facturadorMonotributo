@@ -1,5 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using Back.Extensions;
+using Back.Models;
 
 namespace Back.DTOs
 {
@@ -27,6 +28,27 @@ namespace Back.DTOs
         [Required(ErrorMessage = "El domicilio es requerido.")]
         [StringLength(200, MinimumLength = 5, ErrorMessage = "El domicilio debe tener entre 5 y 200 caracteres.")]
         public string Domicilio { get; set; } = null!;
+
+        [StringLength(30, ErrorMessage = "El vínculo no debe exceder 30 caracteres.")]
+        public string? ResponsableVinculo { get; set; }
+
+        [LettersOnly(ErrorMessage = "El nombre del responsable solo puede contener letras, espacios y guiones.")]
+        [StringLength(100, ErrorMessage = "El nombre del responsable no debe exceder 100 caracteres.")]
+        public string? ResponsableNombre { get; set; }
+
+        [LettersOnly(ErrorMessage = "El apellido del responsable solo puede contener letras, espacios y guiones.")]
+        [StringLength(100, ErrorMessage = "El apellido del responsable no debe exceder 100 caracteres.")]
+        public string? ResponsableApellido { get; set; }
+
+        [Dni(ErrorMessage = "El DNI del responsable debe contener exactamente 8 dígitos.")]
+        [StringLength(8, ErrorMessage = "El DNI del responsable debe contener exactamente 8 dígitos.")]
+        public string? ResponsableDni { get; set; }
+
+        [StringLength(200, ErrorMessage = "El domicilio del responsable no debe exceder 200 caracteres.")]
+        public string? ResponsableDomicilio { get; set; }
+
+        [EnumDataType(typeof(CondicionIVA), ErrorMessage = "La condición de IVA del responsable no es válida.")]
+        public CondicionIVA? ResponsableCondicionIVA { get; set; }
 
         [Url(ErrorMessage = "La URL de la planilla debe ser válida.")]
         [StringLength(500, ErrorMessage = "La URL de la planilla no debe exceder 500 caracteres.")]

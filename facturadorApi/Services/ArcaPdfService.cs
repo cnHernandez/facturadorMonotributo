@@ -1,6 +1,7 @@
 using System.Globalization;
 using Back.Conf;
 using Back.DTOs;
+using Back.Models;
 using Microsoft.Extensions.Options;
 using QRCoder;
 using QuestPDF.Fluent;
@@ -31,8 +32,6 @@ private void CrearPaginaFactura(
     byte[]? qrData,
     CultureInfo culturaArgentina)
 {
-     var esObraSocial =
-        solicitud.TipoDocumentoReceptor == 80;
     var subtotal = !solicitud.EsFacturacionManual &&
         solicitud.CantidadSesiones.HasValue &&
         solicitud.PrecioSesion.HasValue
@@ -304,9 +303,9 @@ private void CrearPaginaFactura(
                                         .Bold();
 
                                     text.Span(
-                                        esObraSocial
-                                            ? "Responsable Inscripto"
-                                            : "Consumidor Final");
+                                        solicitud.CondicionIVAReceptor?.ToDisplayName()
+                                        ?? throw new InvalidOperationException(
+                                            "La factura no tiene condición de IVA del receptor."));
                                 });
 
                             row.RelativeItem(2.2f)
@@ -325,7 +324,14 @@ private void CrearPaginaFactura(
                         .Text(text =>
                         {
                             text.Span("Condición de venta: ").Bold();
-                            text.Span("Contado");
+                            text.Span(
+                                solicitud.CondicionVenta switch
+                                {
+                                    CondicionObraSocial.Contado => "Contado",
+                                    CondicionObraSocial.CuentaCorriente => "Cuenta corriente",
+                                    _ => throw new InvalidOperationException(
+                                        "La factura no tiene una condición de venta válida.")
+                                });
                         });
                 });
 

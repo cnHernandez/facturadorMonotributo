@@ -4,7 +4,7 @@ using Back.Models;
 
 namespace Back.DTOs
 {
-    public class ObraSocialDTO
+    public class ObraSocialDTO : IValidatableObject
     {
         [Required(ErrorMessage = "El CUIT es requerido.")]
         [Cuit(ErrorMessage = "El CUIT debe contener exactamente 11 dígitos.")]
@@ -22,13 +22,29 @@ namespace Back.DTOs
         [Required(ErrorMessage = "La condición de IVA es requerida.")]
         public CondicionObraSocial Condicion { get; set; }
 
-        public CondicionObraSocialIVA CondicionIVA { get; set; }
+        [Required(ErrorMessage = "La condición de IVA es requerida.")]
+        [EnumDataType(typeof(CondicionIVA), ErrorMessage = "La condición de IVA no es válida.")]
+        public CondicionIVA? CondicionIVA { get; set; }
+
+        public bool CondicionIVAConfirmada { get; set; }
 
         [EmailValidation(ErrorMessage = "El correo electrónico debe ser válido.")]
         [StringLength(150, ErrorMessage = "El correo no debe exceder 150 caracteres.")]
         public string? Mail { get; set; }
 
         public bool Estado { get; set; }
+
+        public IEnumerable<ValidationResult> Validate(
+            ValidationContext validationContext)
+        {
+            if (!CondicionIVAConfirmada)
+            {
+                yield return new ValidationResult(
+                    "Debe confirmar que la condición frente al IVA registrada es correcta.",
+                    new[] { nameof(CondicionIVAConfirmada) }
+                );
+            }
+        }
     }
 
     public class ObraSocialResponseDTO : ObraSocialDTO

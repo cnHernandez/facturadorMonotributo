@@ -30,15 +30,38 @@ type Paciente = {
   nombre: string
   apellido: string
   domicilio: string
+  responsableVinculo?: string | null
+  responsableNombre?: string | null
+  responsableApellido?: string | null
+  responsableDni?: string | null
+  responsableDomicilio?: string | null
+  responsableCondicionIVA?: CondicionIVA | null
   estado: boolean
   observaciones: string
   obraSocialId?: number | null
 }
 
-type CondicionObraSocialIVA =
+type CondicionIVA =
   | 'IVA_Sujeto_Exento'
   | 'ResponsableInscripto'
   | 'Consumidor_Final'
+
+const condicionesIVA: {
+  value: CondicionIVA
+  label: string
+}[] = [
+  { value: 'IVA_Sujeto_Exento', label: 'IVA Sujeto Exento' },
+  { value: 'ResponsableInscripto', label: 'Responsable Inscripto' },
+  { value: 'Consumidor_Final', label: 'Consumidor Final' },
+]
+
+function nombreCondicionIVA(
+  condicion: CondicionIVA | null | undefined
+) {
+  return condicionesIVA.find(
+    (item) => item.value === condicion
+  )?.label ?? 'Sin cargar'
+}
 
 type Obra = {
   id: number
@@ -47,7 +70,8 @@ type Obra = {
   domicilioComercial: string
   condicion: 'Contado' | 'CuentaCorriente'
   mail: string | null
-  condicionIVA: CondicionObraSocialIVA
+  condicionIVA: CondicionIVA | null
+  condicionIVAConfirmada: boolean
   estado: boolean
 }
 
@@ -59,6 +83,12 @@ const patientBlank = (): Omit<Paciente, 'id'> => ({
   nombre: '',
   apellido: '',
   domicilio: '',
+  responsableVinculo: '',
+  responsableNombre: '',
+  responsableApellido: '',
+  responsableDni: '',
+  responsableDomicilio: '',
+  responsableCondicionIVA: null,
   estado: true,
   obraSocialId: null,
   observaciones: '',
@@ -69,7 +99,8 @@ const obraBlank = (): Omit<Obra, 'id'> => ({
   nombre: '',
   domicilioComercial: '',
   mail: '',
-  condicionIVA: 'IVA_Sujeto_Exento',
+  condicionIVA: null,
+  condicionIVAConfirmada: false,
   condicion: 'Contado',
   estado: true,
 })
@@ -88,7 +119,12 @@ async function api(
   })
 
   if (!response.ok) {
-    throw new Error(`HTTP ${response.status}`)
+    const responseBody = await response.text()
+    throw new Error(
+      responseBody
+        ? `HTTP ${response.status}: ${responseBody}`
+        : `HTTP ${response.status}`
+    )
   }
 
   return response.status === 204
@@ -122,14 +158,37 @@ function normalizeOptionalText(
   return normalized ? normalized : null
 }
 
+function hasResponsibleInvoiceData(
+  paciente: Paciente | null
+) {
+  return Boolean(
+    paciente?.responsableNombre?.trim() &&
+    paciente.responsableApellido?.trim() &&
+    paciente.responsableDni?.trim() &&
+    paciente.responsableDomicilio?.trim() &&
+    paciente.responsableCondicionIVA
+  )
+}
+
+function hasAnyResponsibleData(
+  paciente: Paciente | null
+) {
+  return Boolean(
+    paciente?.responsableVinculo?.trim() ||
+    paciente?.responsableNombre?.trim() ||
+    paciente?.responsableApellido?.trim() ||
+    paciente?.responsableDni?.trim() ||
+    paciente?.responsableDomicilio?.trim() ||
+    paciente?.responsableCondicionIVA
+  )
+}
+
 function buildDefaultInvoiceDescription({
   paciente,
   fechaDesde,
-  esObraSocial,
 }: {
   paciente: Paciente | null
   fechaDesde: string
-  esObraSocial: boolean
 }) {
   const fechaBase = fechaDesde
     ? new Date(`${fechaDesde}T00:00:00`)
@@ -156,8 +215,12 @@ function buildDefaultInvoiceDescription({
     ? ` AF: ${paciente.numAfiliado}`
     : ''
 
-  if (esObraSocial && paciente) {
-    return `${descripcionBase} PACIENTE: ${paciente.nombre} ${paciente.apellido}${afiliado}`
+  if (paciente) {
+    const dni = paciente.dni
+      ? ` DNI: ${paciente.dni.replace(/^(\d{2})(\d{3})(\d{3})$/, '$1.$2.$3')}`
+      : ''
+
+    return `${descripcionBase} PACIENTE: ${paciente.nombre} ${paciente.apellido}${dni}${afiliado}`
   }
 
   return `${descripcionBase}${afiliado}`
@@ -337,17 +400,36 @@ const loadedObras =
     event.preventDefault()
 
     try {
+      const patientPayload = {
+        ...patient,
+        responsableVinculo: normalizeOptionalText(
+          patient.responsableVinculo
+        ),
+        responsableNombre: normalizeOptionalText(
+          patient.responsableNombre
+        ),
+        responsableApellido: normalizeOptionalText(
+          patient.responsableApellido
+        ),
+        responsableDni: normalizeOptionalText(
+          patient.responsableDni
+        ),
+        responsableDomicilio: normalizeOptionalText(
+          patient.responsableDomicilio
+        ),
+      }
+
       const data = await api(
         patientId
           ? `/api/pacientes/${patientId}`
           : '/api/pacientes',
         patientId ? 'PUT' : 'POST',
-        patient
+        patientPayload
       )
 
       const savedPatient =
         (data ?? {
-          ...patient,
+          ...patientPayload,
           id: patientId ?? Date.now(),
         }) as Paciente
 
@@ -561,12 +643,22 @@ const loadedObras =
             Number(invoicePatientId)
         ) ?? null
 
+  const invoiceToResponsible =
+    targetKind === 'paciente' &&
+    selectedPatient?.obraSocialId == null &&
+    hasResponsibleInvoiceData(selectedPatient)
+
+  const condicionIVAReceptor =
+    targetKind === 'obra'
+      ? selectedObra?.condicionIVA
+      : invoiceToResponsible
+        ? selectedPatient?.responsableCondicionIVA
+        : null
+
   const suggestedInvoiceDescription =
     buildDefaultInvoiceDescription({
       paciente: selectedPatient,
       fechaDesde,
-      esObraSocial:
-        targetKind === 'obra',
     })
 
   const downloadPdf = async () => {
@@ -581,12 +673,90 @@ const loadedObras =
     }
 
     if (
+      targetKind === 'paciente' &&
+      selectedPatient &&
+      selectedPatient.obraSocialId == null &&
+      !hasResponsibleInvoiceData(selectedPatient)
+    ) {
+      setMessage(
+        'Para facturar particular, cargá en la ficha nombre, apellido, DNI, domicilio y condición frente al IVA del tutor'
+      )
+      return
+    }
+
+    if (
+      targetKind === 'paciente' &&
+      selectedPatient &&
+      selectedPatient.obraSocialId == null
+    ) {
+      if (!hasResponsibleInvoiceData(selectedPatient)) {
+        setMessage(
+          'Completá nombre, apellido, DNI, domicilio y condición frente al IVA del padre/madre o tutor en la ficha del paciente'
+        )
+        return
+      }
+
+      const dniResponsable = validateDni(
+        selectedPatient.responsableDni ?? ''
+      )
+
+      if (dniResponsable) {
+        setMessage(
+          'El DNI del padre/madre o tutor debe contener exactamente 8 dígitos'
+        )
+        return
+      }
+
+      const nombreResponsable =
+        `${selectedPatient.responsableNombre ?? ''} ${selectedPatient.responsableApellido ?? ''}`.trim()
+
+      if (
+        validateName(nombreResponsable, 'El nombre del responsable') ||
+        nombreResponsable.length > 150
+      ) {
+        setMessage(
+          'Revisá el nombre y apellido del padre/madre o tutor'
+        )
+        return
+      }
+
+      if (
+        validateDomicilio(
+          selectedPatient.responsableDomicilio ?? ''
+        )
+      ) {
+        setMessage(
+          'El domicilio del padre/madre o tutor debe tener entre 5 y 200 caracteres'
+        )
+        return
+      }
+    }
+
+    if (
       targetKind === 'obra' &&
       (!selectedObra ||
         (!esOsde && !selectedPatient))
     ) {
       setMessage(
         'Seleccioná la obra social y el paciente'
+      )
+      return
+    }
+
+    if (
+      targetKind === 'obra' &&
+      selectedObra &&
+      !selectedObra.condicionIVAConfirmada
+    ) {
+      setMessage(
+        'Revisá y confirmá la condición frente al IVA de la obra social antes de emitir la factura'
+      )
+      return
+    }
+
+    if (!condicionIVAReceptor) {
+      setMessage(
+        'Cargá la condición frente al IVA correcta del receptor en su ficha antes de emitir la factura'
       )
       return
     }
@@ -705,26 +875,35 @@ if (fechaVencimientoError) {
             numeroDocumentoReceptor:
               targetKind === 'paciente'
                 ? Number(
-                    selectedPatient!.dni.replaceAll('-', '')
+                    (invoiceToResponsible
+                      ? selectedPatient!.responsableDni!
+                      : selectedPatient!.dni
+                    ).replaceAll('-', '')
                   )
                 : Number(
                     selectedObra!.cuit.replaceAll('-', '')
                   ),
 
-            condicionIVAReceptor:
-              targetKind === 'obra'
-                ? selectedObra!.condicionIVA
-                : 'Consumidor_Final',
+            condicionIVAReceptor,
 
             nombreReceptor:
               targetKind === 'paciente'
-                ? `${selectedPatient!.nombre} ${selectedPatient!.apellido}`
+                ? invoiceToResponsible
+                  ? `${selectedPatient!.responsableNombre ?? ''} ${selectedPatient!.responsableApellido ?? ''}`
+                  : `${selectedPatient!.nombre} ${selectedPatient!.apellido}`
                 : selectedObra!.nombre,
 
             domicilioReceptor:
               targetKind === 'paciente'
-                ? selectedPatient!.domicilio
+                ? invoiceToResponsible
+                  ? selectedPatient!.responsableDomicilio
+                  : selectedPatient!.domicilio
                 : selectedObra!.domicilioComercial,
+
+            condicionVenta:
+              targetKind === 'obra'
+                ? selectedObra!.condicion
+                : 'Contado',
 
             importeTotal: numericAmount,
 
@@ -1084,11 +1263,11 @@ if (fechaVencimientoError) {
                         <Field label="Paciente">
                           <select
                             value={targetId}
-                            onChange={(event) =>
+                            onChange={(event) => {
                               setTargetId(
                                 event.target.value
                               )
-                            }
+                            }}
                           >
                             {pacientes.length ===
                             0 ? (
@@ -1123,6 +1302,28 @@ if (fechaVencimientoError) {
                             )}
                           </select>
                         </Field>
+
+                        {selectedPatient &&
+                          selectedPatient.obraSocialId == null &&
+                          hasResponsibleInvoiceData(selectedPatient) && (
+                            <p className="self-end pb-2 text-sm font-medium text-slate-700">
+                              Receptor particular:{' '}
+                              {selectedPatient.responsableVinculo?.toLowerCase() ||
+                                'padre/madre o tutor'}
+                              {' ('}
+                              {selectedPatient.responsableNombre}{' '}
+                              {selectedPatient.responsableApellido}
+                              {')'}
+                            </p>
+                          )}
+
+                        {selectedPatient?.obraSocialId == null &&
+                          hasAnyResponsibleData(selectedPatient) &&
+                          !hasResponsibleInvoiceData(selectedPatient) && (
+                            <p className="text-sm text-amber-700 md:col-span-2">
+                              Para facturar particular, completá en la ficha nombre, apellido, DNI, domicilio y condición frente al IVA del padre/madre o tutor.
+                            </p>
+                          )}
 
                         <Field label="Cantidad de sesiones">
   <input
@@ -1542,6 +1743,11 @@ if (fechaVencimientoError) {
                             invoiceDescription
                           ) ??
                             suggestedInvoiceDescription}
+                        </p>
+
+                        <p className="mt-2 text-sm font-medium text-emerald-900">
+                          Condición frente al IVA del receptor:{' '}
+                          {nombreCondicionIVA(condicionIVAReceptor)}
                         </p>
 
                         {targetKind ===
@@ -2138,6 +2344,110 @@ function PatientForm({
         />
       </Field>
 
+      {data.obraSocialId == null && (
+        <section className="space-y-3 rounded-lg border border-slate-200 p-4">
+          <div>
+            <h3 className="font-semibold text-slate-800">
+              Padre, madre o tutor
+            </h3>
+            <p className="text-xs text-slate-500">
+              Datos opcionales para facturación particular. Quedan asociados a este paciente.
+            </p>
+          </div>
+
+          <Field label="Vínculo con el paciente">
+            <select
+              value={data.responsableVinculo ?? ''}
+              onChange={(event) =>
+                setData({
+                  ...data,
+                  responsableVinculo: event.target.value,
+                })
+              }
+            >
+              <option value="">Seleccionar</option>
+              <option value="Madre">Madre</option>
+              <option value="Padre">Padre</option>
+              <option value="Tutor/a">Tutor/a</option>
+            </select>
+          </Field>
+
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Nombre">
+              <input
+                value={data.responsableNombre ?? ''}
+                onChange={(event) =>
+                  setData({
+                    ...data,
+                    responsableNombre: event.target.value,
+                  })
+                }
+              />
+            </Field>
+
+            <Field label="Apellido">
+              <input
+                value={data.responsableApellido ?? ''}
+                onChange={(event) =>
+                  setData({
+                    ...data,
+                    responsableApellido: event.target.value,
+                  })
+                }
+              />
+            </Field>
+          </div>
+
+          <Field label="DNI del responsable">
+            <input
+              inputMode="numeric"
+              maxLength={8}
+              value={data.responsableDni ?? ''}
+              onChange={(event) =>
+                setData({
+                  ...data,
+                  responsableDni: event.target.value,
+                })
+              }
+              placeholder="12345678"
+            />
+          </Field>
+
+          <Field label="Domicilio del responsable">
+            <input
+              maxLength={200}
+              value={data.responsableDomicilio ?? ''}
+              onChange={(event) =>
+                setData({
+                  ...data,
+                  responsableDomicilio: event.target.value,
+                })
+              }
+            />
+          </Field>
+
+          <Field label="Condición frente al IVA del responsable">
+            <select
+              value={data.responsableCondicionIVA ?? ''}
+              onChange={(event) =>
+                setData({
+                  ...data,
+                  responsableCondicionIVA:
+                    (event.target.value as CondicionIVA) || null,
+                })
+              }
+            >
+              <option value="">Seleccionar condición</option>
+              {condicionesIVA.map((item) => (
+                <option key={item.value} value={item.value}>
+                  {item.label}
+                </option>
+              ))}
+            </select>
+          </Field>
+        </section>
+      )}
+
       <Field label="Obra social">
         <select
           value={
@@ -2264,7 +2574,9 @@ function ObraForm({
     !hasErrors(errors) &&
     data.cuit &&
     data.nombre &&
-    data.domicilioComercial
+    data.domicilioComercial &&
+    data.condicionIVA &&
+    data.condicionIVAConfirmada
 
   const isFieldValid = (field: keyof ObraErrors): boolean => {
     return !errors[field] && !!data[field as keyof typeof data]
@@ -2374,29 +2686,39 @@ function ObraForm({
 
       <Field label="Condición frente al IVA">
         <select
-          value={data.condicionIVA}
+          required
+          value={data.condicionIVA ?? ''}
           onChange={(event) =>
             setData({
               ...data,
               condicionIVA:
-                event.target
-                  .value as CondicionObraSocialIVA,
+                (event.target.value as CondicionIVA) || null,
+              condicionIVAConfirmada: false,
             })
           }
         >
-          <option value="IVA_Sujeto_Exento">
-            IVA Sujeto Exento
-          </option>
-
-          <option value="ResponsableInscripto">
-            Responsable Inscripto
-          </option>
-
-          <option value="Consumidor_Final">
-            Consumidor Final
-          </option>
+          <option value="">Seleccionar condición</option>
+          {condicionesIVA.map((item) => (
+            <option key={item.value} value={item.value}>
+              {item.label}
+            </option>
+          ))}
         </select>
       </Field>
+
+      <label className="flex items-start gap-2 text-sm text-slate-700">
+        <input
+          type="checkbox"
+          checked={data.condicionIVAConfirmada}
+          onChange={(event) =>
+            setData({
+              ...data,
+              condicionIVAConfirmada: event.target.checked,
+            })
+          }
+        />
+        Confirmo que esta condición frente al IVA corresponde a la obra social.
+      </label>
 
       <Field label="Condición">
         <select

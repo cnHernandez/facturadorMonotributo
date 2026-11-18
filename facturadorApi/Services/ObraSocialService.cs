@@ -57,6 +57,7 @@ private static void Apply(ObraSocialDTO dto, ObraSocial obraSocial)
         : dto.Mail.Trim();
 
     obraSocial.CondicionIVA = dto.CondicionIVA;
+    obraSocial.CondicionIVAConfirmada = dto.CondicionIVAConfirmada;
     obraSocial.Condicion = dto.Condicion;
     obraSocial.Estado = dto.Estado;
 }
@@ -69,6 +70,7 @@ private static void Apply(ObraSocialDTO dto, ObraSocial obraSocial)
     DomicilioComercial = obraSocial.DomicilioComercial,
     Mail = obraSocial.Mail,
     CondicionIVA = obraSocial.CondicionIVA,
+    CondicionIVAConfirmada = obraSocial.CondicionIVAConfirmada,
     Condicion = obraSocial.Condicion,
     Estado = obraSocial.Estado
 };

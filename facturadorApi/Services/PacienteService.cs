@@ -54,6 +54,12 @@ namespace Back.Services
             paciente.Nombre = dto.Nombre;
             paciente.Apellido = dto.Apellido;
             paciente.Domicilio = dto.Domicilio;
+            paciente.ResponsableVinculo = dto.ResponsableVinculo;
+            paciente.ResponsableNombre = dto.ResponsableNombre;
+            paciente.ResponsableApellido = dto.ResponsableApellido;
+            paciente.ResponsableDni = dto.ResponsableDni;
+            paciente.ResponsableDomicilio = dto.ResponsableDomicilio;
+            paciente.ResponsableCondicionIVA = dto.ResponsableCondicionIVA;
             paciente.PlanillaAsistenciaImagenUrl = dto.PlanillaAsistenciaImagenUrl;
             paciente.Estado = dto.Estado;
              paciente.Observaciones = dto.Observaciones ?? "";
@@ -68,6 +74,12 @@ namespace Back.Services
             Nombre = paciente.Nombre,
             Apellido = paciente.Apellido,
             Domicilio = paciente.Domicilio,
+            ResponsableVinculo = paciente.ResponsableVinculo,
+            ResponsableNombre = paciente.ResponsableNombre,
+            ResponsableApellido = paciente.ResponsableApellido,
+            ResponsableDni = paciente.ResponsableDni,
+            ResponsableDomicilio = paciente.ResponsableDomicilio,
+            ResponsableCondicionIVA = paciente.ResponsableCondicionIVA,
             PlanillaAsistenciaImagenUrl = paciente.PlanillaAsistenciaImagenUrl,
             Estado = paciente.Estado,
             Observaciones = paciente.Observaciones,

@@ -33,8 +33,8 @@ namespace facturador.net.Migrations
                     b.Property<int>("Condicion")
                         .HasColumnType("int");
 
-                    b.Property<int>("CondicionIVA")
-                        .HasColumnType("int");
+                    b.Property<bool>("CondicionIVAConfirmada")
+                        .HasColumnType("tinyint(1)");
 
                     b.Property<string>("Cuit")
                         .IsRequired()
@@ -75,6 +75,9 @@ namespace facturador.net.Migrations
                         .IsRequired()
                         .HasColumnType("longtext");
 
+                    b.Property<int?>("CondicionIVA")
+                        .HasColumnType("int");
+
                     b.Property<string>("Dni")
                         .IsRequired()
                         .HasColumnType("varchar(255)");
@@ -103,6 +106,29 @@ namespace facturador.net.Migrations
 
                     b.Property<string>("PlanillaAsistenciaImagenUrl")
                         .HasColumnType("longtext");
+
+                    b.Property<string>("ResponsableApellido")
+                        .HasMaxLength(100)
+                        .HasColumnType("varchar(100)");
+
+                    b.Property<int?>("ResponsableCondicionIVA")
+                        .HasColumnType("int");
+
+                    b.Property<string>("ResponsableDni")
+                        .HasMaxLength(8)
+                        .HasColumnType("varchar(8)");
+
+                    b.Property<string>("ResponsableDomicilio")
+                        .HasMaxLength(200)
+                        .HasColumnType("varchar(200)");
+
+                    b.Property<string>("ResponsableNombre")
+                        .HasMaxLength(100)
+                        .HasColumnType("varchar(100)");
+
+                    b.Property<string>("ResponsableVinculo")
+                        .HasMaxLength(30)
+                        .HasColumnType("varchar(30)");
 
                     b.HasKey("Id");
 

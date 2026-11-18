@@ -14,6 +14,7 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.Extensions.Options;
 using Back.Conf;
+using Back.Models;
 using QuestPDF.Infrastructure;
 
 var MyAllowSpecificOrigins = "_myAllowSpecificOrigins";
@@ -296,6 +297,28 @@ try
             var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
             await db.Database.MigrateAsync();
             Log.Information("✓ Migraciones aplicadas exitosamente en Production");
+        }
+    }
+
+    using (var scope = app.Services.CreateScope())
+    {
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+        if (!await db.Usuarios.AnyAsync(
+            item => item.UserName == "admin"))
+        {
+            db.Usuarios.Add(new Usuario
+            {
+                UserName = "admin",
+                PasswordHash =
+                    BCrypt.Net.BCrypt.HashPassword("admin123"),
+                Rol = "Admin",
+                Activo = true
+            });
+
+            await db.SaveChangesAsync();
+            Log.Information(
+                "✓ Usuario administrativo inicial creado");
         }
     }
 

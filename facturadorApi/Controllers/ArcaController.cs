@@ -1,11 +1,13 @@
 using Back.DTOs;
 using Back.Services;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Back.Controllers
 {
     [Route("api/arca")]
     [ApiController]
+    [Authorize]
     public class ArcaController : ControllerBase
     {
         private readonly IArcaAuthenticationService _authenticationService;

@@ -33,6 +33,9 @@ namespace facturador.net.Migrations
                     b.Property<int>("Condicion")
                         .HasColumnType("int");
 
+                    b.Property<int?>("CondicionIVA")
+                        .HasColumnType("int");
+
                     b.Property<bool>("CondicionIVAConfirmada")
                         .HasColumnType("tinyint(1)");
 
@@ -48,8 +51,8 @@ namespace facturador.net.Migrations
                         .HasColumnType("tinyint(1)");
 
                     b.Property<string>("Mail")
-                        .IsRequired()
-                        .HasColumnType("longtext");
+                        .HasMaxLength(150)
+                        .HasColumnType("varchar(150)");
 
                     b.Property<string>("Nombre")
                         .IsRequired()
@@ -74,9 +77,6 @@ namespace facturador.net.Migrations
                     b.Property<string>("Apellido")
                         .IsRequired()
                         .HasColumnType("longtext");
-
-                    b.Property<int?>("CondicionIVA")
-                        .HasColumnType("int");
 
                     b.Property<string>("Dni")
                         .IsRequired()
@@ -138,6 +138,34 @@ namespace facturador.net.Migrations
                     b.HasIndex("ObraSocialId");
 
                     b.ToTable("Pacientes");
+                });
+
+            modelBuilder.Entity("Back.Models.Usuario", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<bool>("Activo")
+                        .HasColumnType("tinyint(1)");
+
+                    b.Property<string>("PasswordHash")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<string>("Rol")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<string>("UserName")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("Usuarios");
                 });
 
             modelBuilder.Entity("Back.Models.Paciente", b =>

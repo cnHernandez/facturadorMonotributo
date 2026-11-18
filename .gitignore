@@ -23,3 +23,9 @@
 .runtime/
 **/.runtime/
 **/logs/
+
+# Respaldos, scripts con secretos y archivos temporales
+*.sql
+*backup*
+*.env.*
+!.env.example

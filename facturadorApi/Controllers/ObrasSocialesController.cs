@@ -1,11 +1,13 @@
 using Back.DTOs;
 using Back.Services;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Back.Controllers
 {
     [Route("api/obras-sociales")]
     [ApiController]
+    [Authorize]
     public class ObrasSocialesController : ControllerBase
     {
         private readonly IObraSocialService _service;

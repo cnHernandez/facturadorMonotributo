@@ -75,4 +75,5 @@ public class AppDbContext : DbContext
 
     public DbSet<Paciente> Pacientes { get; set; }
     public DbSet<ObraSocial> ObrasSociales { get; set; }
+    public DbSet<Usuario> Usuarios { get; set; }
 }

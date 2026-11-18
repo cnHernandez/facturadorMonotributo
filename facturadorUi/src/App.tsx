@@ -10,6 +10,11 @@ import {
   X,
   AlertCircle,
   CheckCircle2,
+  Eye,
+  EyeOff,
+  LogIn,
+  LogOut,
+  KeyRound,
 } from 'lucide-react'
 import {
   validateDni,
@@ -114,6 +119,10 @@ async function api(
     method,
     headers: {
       'Content-Type': 'application/json',
+      Authorization:
+        `Bearer ${window.sessionStorage.getItem(
+          'lau_admin_token'
+        ) ?? ''}`,
     },
     body: body ? JSON.stringify(body) : undefined,
   })
@@ -233,6 +242,35 @@ function App() {
   )
   const [view, setView] = useState<View>('pacientes')
   const [message, setMessage] = useState('Cargando datos...')
+  const [isAuthenticated, setIsAuthenticated] =
+    useState(
+      () =>
+        Boolean(
+          window.sessionStorage.getItem(
+            'lau_admin_token'
+          )
+        )
+    )
+  const [loginUsername, setLoginUsername] =
+    useState('')
+  const [loginPassword, setLoginPassword] =
+    useState('')
+  const [showLoginPassword, setShowLoginPassword] =
+    useState(false)
+  const [loginError, setLoginError] =
+    useState('')
+  const [showPasswordModal, setShowPasswordModal] =
+    useState(false)
+  const [currentPassword, setCurrentPassword] =
+    useState('')
+  const [newPassword, setNewPassword] =
+    useState('')
+  const [confirmPassword, setConfirmPassword] =
+    useState('')
+  const [showChangePassword, setShowChangePassword] =
+    useState(false)
+  const [passwordMessage, setPasswordMessage] =
+    useState('')
 
   const [pacientes, setPacientes] = useState<Paciente[]>([])
   const [obras, setObras] = useState<Obra[]>([])
@@ -292,6 +330,10 @@ function App() {
     useState('')
 
   useEffect(() => {
+    if (!isAuthenticated) {
+      return
+    }
+
     Promise.all([
       api('/api/pacientes', 'GET'),
       api('/api/obras-sociales', 'GET'),
@@ -352,7 +394,7 @@ const loadedObras =
           'Error conectando con API'
         )
       })
-  }, [])
+  }, [isAuthenticated])
 
   const openNewPatient = () => {
     setPatient(patientBlank())
@@ -455,6 +497,108 @@ const loadedObras =
 
       setMessage(
         'No se pudo guardar el paciente'
+      )
+    }
+  }
+
+  const handleLogin = async (
+    event: React.FormEvent
+  ) => {
+    event.preventDefault()
+
+    try {
+      const response =
+        await api('/api/auth/login', 'POST', {
+          userName: loginUsername.trim(),
+          password: loginPassword,
+        }) as {
+          token: string
+          userName: string
+        }
+
+      window.sessionStorage.setItem(
+        'lau_admin_token',
+        response.token
+      )
+      setLoginError('')
+      setIsAuthenticated(true)
+    } catch {
+      setLoginError(
+        'Usuario o contraseña incorrectos'
+      )
+    }
+  }
+
+  const handleLogout = () => {
+    window.sessionStorage.removeItem(
+      'lau_admin_token'
+    )
+    setLoginPassword('')
+    setLoginError('')
+    setIsAuthenticated(false)
+  }
+
+  const openPasswordModal = () => {
+    setCurrentPassword('')
+    setNewPassword('')
+    setConfirmPassword('')
+    setPasswordMessage('')
+    setShowChangePassword(false)
+    setShowPasswordModal(true)
+  }
+
+  const closePasswordModal = () => {
+    setShowPasswordModal(false)
+    setPasswordMessage('')
+  }
+
+  const handleChangePassword = async (
+    event: React.FormEvent
+  ) => {
+    event.preventDefault()
+    setPasswordMessage('')
+
+    if (newPassword.length < 8) {
+      setPasswordMessage(
+        'La nueva contraseña debe tener al menos 8 caracteres'
+      )
+      return
+    }
+
+    if (newPassword !== confirmPassword) {
+      setPasswordMessage(
+        'Las contraseñas nuevas no coinciden'
+      )
+      return
+    }
+
+    if (newPassword === currentPassword) {
+      setPasswordMessage(
+        'La nueva contraseña debe ser distinta'
+      )
+      return
+    }
+
+    try {
+      await api(
+        '/api/auth/change-password',
+        'POST',
+        {
+          currentPassword,
+          newPassword,
+        }
+      )
+
+      setPasswordMessage(
+        'Contraseña cambiada correctamente'
+      )
+      setCurrentPassword('')
+      setNewPassword('')
+      setConfirmPassword('')
+    } catch (error) {
+      console.error(error)
+      setPasswordMessage(
+        'No se pudo cambiar la contraseña. Revisá la contraseña actual.'
       )
     }
   }
@@ -1025,6 +1169,99 @@ if (fechaVencimientoError) {
     },
   ]
 
+  if (!isAuthenticated) {
+    return (
+      <main className="login-page">
+        <section className="login-card" aria-label="Inicio de sesión">
+          <div className="login-brand">
+            <div className="login-brand-icon">
+              <HeartPulse size={26} />
+            </div>
+            <div>
+              <p>Lau · Gestión clínica</p>
+              <span>Sistema de facturación</span>
+            </div>
+          </div>
+
+          <div className="login-heading">
+            <h1>Bienvenida</h1>
+            <p>Ingresá tus datos para continuar</p>
+          </div>
+
+          <form onSubmit={handleLogin} className="login-form">
+            <Field label="Usuario">
+              <input
+                autoComplete="username"
+                value={loginUsername}
+                onChange={(event) =>
+                  setLoginUsername(
+                    event.target.value
+                  )
+                }
+                placeholder="Ingresá tu usuario"
+              />
+            </Field>
+
+            <Field label="Contraseña" error={loginError}>
+              <div className="login-password-wrap">
+                <input
+                  type={
+                    showLoginPassword
+                      ? 'text'
+                      : 'password'
+                  }
+                  autoComplete="current-password"
+                  value={loginPassword}
+                  onChange={(event) =>
+                    setLoginPassword(
+                      event.target.value
+                    )
+                  }
+                  placeholder="Ingresá tu contraseña"
+                />
+                <button
+                  type="button"
+                  className="login-password-toggle"
+                  onClick={() =>
+                    setShowLoginPassword(
+                      (visible) => !visible
+                    )
+                  }
+                  aria-label={
+                    showLoginPassword
+                      ? 'Ocultar contraseña'
+                      : 'Mostrar contraseña'
+                  }
+                  title={
+                    showLoginPassword
+                      ? 'Ocultar contraseña'
+                      : 'Mostrar contraseña'
+                  }
+                >
+                  {showLoginPassword
+                    ? <EyeOff size={18} />
+                    : <Eye size={18} />}
+                </button>
+              </div>
+            </Field>
+
+            <button
+              type="submit"
+              className="login-submit"
+            >
+              <LogIn size={18} />
+              Iniciar sesión
+            </button>
+          </form>
+
+          <p className="login-footer">
+            Acceso administrativo
+          </p>
+        </section>
+      </main>
+    )
+  }
+
   return (
     <div className="min-h-screen bg-[#edf3f0] text-slate-800">
       <header className="flex h-16 items-center justify-between border-b border-emerald-950/10 bg-white px-5 md:px-8">
@@ -1044,9 +1281,29 @@ if (fechaVencimientoError) {
           </div>
         </div>
 
-        <span className="hidden text-xs text-slate-500 sm:block">
-          {message}
-        </span>
+        <div className="flex items-center gap-3">
+          <span className="hidden text-xs text-slate-500 sm:block">
+            {message}
+          </span>
+          <button
+            type="button"
+            onClick={openPasswordModal}
+            className="icon-button"
+            aria-label="Cambiar contraseña"
+            title="Cambiar contraseña"
+          >
+            <KeyRound size={18} />
+          </button>
+          <button
+            type="button"
+            onClick={handleLogout}
+            className="icon-button"
+            aria-label="Cerrar sesión"
+            title="Cerrar sesión"
+          >
+            <LogOut size={18} />
+          </button>
+        </div>
       </header>
 
       <div className="mx-auto grid max-w-[1440px] md:grid-cols-[214px_1fr]">
@@ -1857,6 +2114,99 @@ if (fechaVencimientoError) {
               patientId !== null
             }
           />
+        </Modal>
+      )}
+
+      {showPasswordModal && (
+        <Modal
+          title="Cambiar contraseña"
+          onClose={closePasswordModal}
+        >
+          <form
+            onSubmit={handleChangePassword}
+            className="space-y-4"
+          >
+            {[
+              {
+                label: 'Contraseña actual',
+                value: currentPassword,
+                setValue: setCurrentPassword,
+              },
+              {
+                label: 'Nueva contraseña',
+                value: newPassword,
+                setValue: setNewPassword,
+              },
+              {
+                label: 'Confirmar nueva contraseña',
+                value: confirmPassword,
+                setValue: setConfirmPassword,
+              },
+            ].map((field) => (
+              <Field
+                key={field.label}
+                label={field.label}
+              >
+                <div className="login-password-wrap">
+                  <input
+                    type={
+                      showChangePassword
+                        ? 'text'
+                        : 'password'
+                    }
+                    autoComplete="new-password"
+                    value={field.value}
+                    onChange={(event) =>
+                      field.setValue(
+                        event.target.value
+                      )
+                    }
+                    required
+                  />
+                  <button
+                    type="button"
+                    className="login-password-toggle"
+                    onClick={() =>
+                      setShowChangePassword(
+                        (visible) => !visible
+                      )
+                    }
+                    aria-label={
+                      showChangePassword
+                        ? 'Ocultar contraseñas'
+                        : 'Mostrar contraseñas'
+                    }
+                  >
+                    {showChangePassword
+                      ? <EyeOff size={18} />
+                      : <Eye size={18} />}
+                  </button>
+                </div>
+              </Field>
+            ))}
+
+            {passwordMessage && (
+              <p
+                className={
+                  passwordMessage.includes(
+                    'correctamente'
+                  )
+                    ? 'rounded-md bg-emerald-50 p-3 text-sm text-emerald-700'
+                    : 'rounded-md bg-red-50 p-3 text-sm text-red-700'
+                }
+              >
+                {passwordMessage}
+              </p>
+            )}
+
+            <button
+              type="submit"
+              className="command w-full justify-center"
+            >
+              <KeyRound size={17} />
+              Guardar contraseña
+            </button>
+          </form>
         </Modal>
       )}
 
